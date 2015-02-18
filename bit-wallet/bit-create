@@ -8,7 +8,8 @@ var utils = require('./cli-utils');
 program
   .version('0.0.1')
   .option('-c, --config [file]', 'Wallet config filename')
-  .option('-t, --testnet', 'Create a Testnet Wallet', String)
+  .option('-h, --host [host]', 'Bitcore Wallet Service URL (eg: http://localhost:3001/copay/api')
+  .option('-t, --testnet', 'Create a Testnet Wallet')
   .usage('[options] <walletName> <m-n> [copayerName]')
   .parse(process.argv);
 

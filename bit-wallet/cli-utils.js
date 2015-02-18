@@ -20,7 +20,7 @@ Utils.parseMN = function(MN) {
   var n = parseInt(mn[1]);
 
   if (!m || ! n) {
-    die('Bad m-n parameter');
+    die('Bad m-n parameter:' + MN);
   }
 
   return [m, n];
@@ -31,12 +31,17 @@ Utils.shortID = function(id) {
   return id.substr(id.length - 4);
 };
 
+Utils.confirmationId = function(copayer) {
+  return parseInt(copayer.xPubKeySignature.substr(-4), 16).toString().substr(-4);
+}
+
 Utils.getClient = function(args) {
   var storage = new Client.FileStorage({
     filename: args.config || process.env['BIT_FILE'],
   });
   return new Client({
     storage: storage,
+    baseUrl: args.host || process.env['BIT_HOST'],
     verbose: args.verbose
   });
 }
