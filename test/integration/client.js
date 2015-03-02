@@ -944,6 +944,16 @@ describe('client API ', function() {
             password: '123'
           });
         });
+        it('should export without signing rights', function() {
+          clients[0].canSign().should.be.true;
+          var exported = clients[0].export({
+            noSign: true,
+          });
+
+          importedClient = helpers.newClient(app);
+          importedClient.import(exported);
+          importedClient.canSign().should.be.false;
+        });
       });
       describe('Fail', function() {
         it.skip('should fail to export compressed & import uncompressed', function() {});
