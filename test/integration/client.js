@@ -944,6 +944,16 @@ describe('client API ', function() {
             password: '123'
           });
         });
+        it('should export without signing rights', function() {
+          clients[0].canSign().should.be.true;
+          var exported = clients[0].export({
+            noSign: true,
+          });
+
+          importedClient = helpers.newClient(app);
+          importedClient.import(exported);
+          importedClient.canSign().should.be.false;
+        });
       });
       describe('Fail', function() {
         it.skip('should fail to export compressed & import uncompressed', function() {});
@@ -976,6 +986,48 @@ describe('client API ', function() {
                 should.exist(list);
                 list[0].address.should.equal(addr.address);
                 done();
+              });
+            });
+          });
+        });
+      });
+      it('should be able to recreate wallet', function(done) {
+        helpers.createAndJoinWallet(clients, 2, 2, function() {
+          clients[0].createAddress(function(err, addr) {
+            should.not.exist(err);
+            should.exist(addr);
+
+            var db = levelup(memdown, {
+              valueEncoding: 'json'
+            });
+            var storage = new Storage({
+              db: db
+            });
+            var newApp = ExpressApp.start({
+              WalletService: {
+                storage: storage,
+                blockExplorer: blockExplorerMock,
+              },
+              disableLogs: true,
+            });
+
+            var recoveryClient = helpers.newClient(newApp);
+            recoveryClient.import(clients[0].export());
+
+            recoveryClient.getStatus(function(err, status) {
+              should.exist(err);
+              err.code.should.equal('NOTAUTHORIZED');
+              recoveryClient.recreateWallet(function(err) {
+                should.not.exist(err);
+                recoveryClient.getStatus(function(err, status) {
+                  should.not.exist(err);
+                  recoveryClient.createAddress(function(err, addr2) {
+                    should.not.exist(err);
+                    should.exist(addr2);
+                    addr2.should.deep.equal(addr);
+                    done();
+                  });
+                });
               });
             });
           });
