@@ -21,25 +21,31 @@ program
 var args = program.args;
 
 utils.getClient(program, function (client) {
-  var x = client.export({
-    compressed: !!program.qr,
-    noSign: !!program.nosign,
-    password: program.password,
-  });
+  var x;
+  try {
+    x = client.export({
+      compressed: !!program.qr,
+      noSign: !!program.nosign,
+      password: program.password,
+    });
+  } catch (ex) {
+    die(ex);
+  }
 
+  var access = !!program.nosign ? 'without signing capability' : 'with signing capability';
   if (program.qr) {
     var filename = program.file + '.svg';
     var qr_svg = qr.image(x, {
       type: 'svg'
     });
     qr_svg.pipe(fs.createWriteStream(filename));
-    console.log('Wallet data: exported to %s', filename);
+    console.log('Wallet data: exported to %s %s.', filename, access);
   } else {
     if (program.output) {
-      fs.writeFileSync(program.output, x);
-      console.log('Wallet data saved at %s', program.output);
+      fs.writeFileSync(program.output, x, { encoding: 'utf8' });
+      console.log('Wallet data saved at %s %s.', program.output, access);
     } else {
-      console.log('Wallet data \n%s', x);
+      console.log('Wallet data (%s).\n%s', access, x);
     }
   }
 });
