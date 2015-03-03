@@ -230,7 +230,7 @@ describe('client API ', function() {
         })
       });
     });
-    it('should be able to complete wallets in copayer that joined later', function(done) {
+    it('should be able to complete wallet in copayer that joined later', function(done) {
       helpers.createAndJoinWallet(clients, 2, 3, function() {
         clients[0].getBalance(function(err, x) {
           should.not.exist(err);
@@ -274,7 +274,7 @@ describe('client API ', function() {
       });
     });
 
-    it('should reject wallets with bad signatures', function(done) {
+    it('should detect wallets with bad signatures', function(done) {
       // Do not complete clients[1] pkr
       var openWalletStub = sinon.stub(clients[1], 'openWallet').yields();
 
@@ -291,7 +291,7 @@ describe('client API ', function() {
       });
     });
 
-    it('should reject wallets with missing signatures', function(done) {
+    it('should detect wallets with missing signatures', function(done) {
       // Do not complete clients[1] pkr
       var openWalletStub = sinon.stub(clients[1], 'openWallet').yields();
 
@@ -308,7 +308,7 @@ describe('client API ', function() {
       });
     });
 
-    it('should reject wallets missing callers pubkey', function(done) {
+    it('should detect wallets missing callers pubkey', function(done) {
       // Do not complete clients[1] pkr
       var openWalletStub = sinon.stub(clients[1], 'openWallet').yields();
 
@@ -327,7 +327,21 @@ describe('client API ', function() {
         });
       });
     });
-    it.skip('should return wallet status even if wallet is not yet complete', function(done) {});
+    it('should return wallet status even if wallet is not yet complete', function(done) {
+      clients[0].createWallet('wallet name', 'creator', 1, 2, 'testnet', function(err, secret) {
+        should.not.exist(err);
+        should.exist(secret);
+
+        clients[0].getStatus(function(err, status) {
+          should.not.exist(err);
+          should.exist(status);
+          status.wallet.status.should.equal('pending');
+          should.exist(status.wallet.secret);
+          status.wallet.secret.should.equal(secret);
+          done();
+        });
+      });
+    });
   });
 
   describe('Address Creation', function() {
