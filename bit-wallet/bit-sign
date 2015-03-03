@@ -9,7 +9,7 @@ program = utils.configureCommander(program);
 program
   .usage('[options] <txpid>')
   .option('-i, --input [filename]', 'use signatures from file')
-  .option('-o, --output [filename]', 'write signatures to  file')
+  .option('-o, --output [filename]', 'write signatures to file')
   .parse(process.argv);
 
 var args = program.args;

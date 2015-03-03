@@ -21,7 +21,7 @@ program
   .command('confirm', 'show copayer\'s data for confirmation')
   .command('recreate', 'recreate a wallet on a remove server given local infomation')
   .command('txproposals', 'list transactions proposals')
-  .command('genkey', 'generates extended private key for later wallet usage')
+  .command('airgen', 'generates extended private key for later wallet usage')
   .parse(process.argv);
 
 if (!program.args.length || !program.runningCommand)

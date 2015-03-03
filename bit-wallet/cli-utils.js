@@ -55,7 +55,7 @@ Utils.getClient = function(args, cb) {
 
     client.import(walletData);
     client.openWallet(function(err, justCompleted) {
-      if (client.isComplete() && justCompleted) {
+      if (!err && client.isComplete() && justCompleted) {
         Utils.saveClient(args, client, function() {
           log.info('Your wallet has just been completed. Please backup your wallet file or use the export command.');
           return cb(client);

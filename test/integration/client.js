@@ -1052,16 +1052,21 @@ describe('client API ', function() {
 
   describe('Air gapped related flows', function() {
     it('should create wallet in proxy from airgapped', function(done) {
-      var airgapped = new AirGapped({
-        network: 'testnet'
+      var airgapped = new Client();
+      airgapped.seedFromRandom('testnet');
+      var exported = airgapped.export({
+        noSign: true
       });
-      var seed = airgapped.getSeed();
 
       var proxy = helpers.newClient(app);
-      proxy.seedFromAirGapped(seed);
+      proxy.import(exported);
+      should.not.exist(proxy.credentials.xPrivKey);
+
+      var seedSpy = sinon.spy(proxy, 'seedFromRandom');
       should.not.exist(proxy.credentials.xPrivKey);
       proxy.createWallet('wallet name', 'creator', 1, 1, 'testnet', function(err) {
         should.not.exist(err);
+        seedSpy.called.should.be.false;
         proxy.getStatus(function(err, status) {
           should.not.exist(err);
           status.wallet.name.should.equal('wallet name');
@@ -1071,13 +1076,15 @@ describe('client API ', function() {
     });
 
     it('should be able to sign from airgapped client and broadcast from proxy', function(done) {
-      var airgapped = new AirGapped({
-        network: 'testnet'
+      var airgapped = new Client();
+      airgapped.seedFromRandom('testnet');
+      var exported = airgapped.export({
+        noSign: true
       });
-      var seed = airgapped.getSeed();
 
       var proxy = helpers.newClient(app);
-      proxy.seedFromAirGapped(seed);
+      proxy.import(exported);
+      should.not.exist(proxy.credentials.xPrivKey);
 
       async.waterfall([
 
@@ -1112,7 +1119,7 @@ describe('client API ', function() {
             }, next);
           },
           function(bundle, next) {
-            var signatures = airgapped.signTxProposal(bundle.txps[0], bundle.publicKeyRing, bundle.m, bundle.n);
+            var signatures = airgapped.signTxProposalFromAirGapped(bundle.txps[0], bundle.publicKeyRing, bundle.m, bundle.n);
             next(null, signatures);
           },
           function(signatures, next) {
