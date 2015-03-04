@@ -1137,7 +1137,7 @@ describe('client API ', function() {
             }, next);
           },
           function(bundle, next) {
-            var signatures = airgapped.signTxProposalFromAirGapped(bundle.txps[0], bundle.publicKeyRing, bundle.m, bundle.n);
+            var signatures = airgapped.signTxProposalFromAirGapped(bundle.txps[0], bundle.encryptedPkr, bundle.m, bundle.n);
             next(null, signatures);
           },
           function(signatures, next) {
