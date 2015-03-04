@@ -42,6 +42,14 @@ Utils.confirmationId = function(copayer) {
 }
 
 Utils.getClient = function(args, cb) {
+  return Utils._getClient(args, false, cb);
+};
+
+Utils.getAirClient = function(args, cb) {
+  return Utils._getClient(args, true, cb);
+};
+
+Utils._getClient = function(args, airgapped, cb) {
   var storage = new FileStorage({
     filename: args.file || process.env['BIT_FILE'],
   });
@@ -54,6 +62,8 @@ Utils.getClient = function(args, cb) {
     if (!walletData) return cb(client);
 
     client.import(walletData);
+    if (airgapped) return cb(client);
+
     client.openWallet(function(err, justCompleted) {
       if (!err && client.isComplete() && justCompleted) {
         Utils.saveClient(args, client, function() {
