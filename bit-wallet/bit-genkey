@@ -17,6 +17,6 @@ utils.getClient(program, function (client) {
   client.seedFromRandom(network);
   utils.saveClient(program, client, function () {
     console.log(' * ' + _.capitalize(network) + ' Extended Private Key Created.');
-    console.log('   To operate with the corresponding public keys from a proxy device, please run `bit-export -nosign` and then on the proxy device `bit-import`.');
+    console.log('   To operate with the corresponding public keys from a proxy device, please run `bit-export --nosign` and then on the proxy device `bit-import`.');
   });
 });

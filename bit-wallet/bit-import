@@ -11,7 +11,7 @@ program
   .version('0.0.1')
   .option('-q, --qr', 'import from a QR code')
   .option('-p, --password [password]', 'a password to decrypt the data being imported')
-  .usage('import [options] <file>')
+  .usage('[options] <file>')
   .parse(process.argv);
 
 var args = program.args;

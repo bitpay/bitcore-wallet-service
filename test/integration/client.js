@@ -1074,7 +1074,25 @@ describe('client API ', function() {
         });
       });
     });
+    it('should fail to create wallet in proxy from airgapped when networks do not match', function(done) {
+      var airgapped = new Client();
+      airgapped.seedFromRandom('testnet');
+      var exported = airgapped.export({
+        noSign: true
+      });
 
+      var proxy = helpers.newClient(app);
+      proxy.import(exported);
+      should.not.exist(proxy.credentials.xPrivKey);
+
+      var seedSpy = sinon.spy(proxy, 'seedFromRandom');
+      should.not.exist(proxy.credentials.xPrivKey);
+      proxy.createWallet('wallet name', 'creator', 1, 1, 'livenet', function(err) {
+        should.exist(err);
+        err.message.should.equal('Existing keys were created for a different network');
+        done();
+      });
+    });
     it('should be able to sign from airgapped client and broadcast from proxy', function(done) {
       var airgapped = new Client();
       airgapped.seedFromRandom('testnet');
