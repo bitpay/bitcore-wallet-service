@@ -608,7 +608,15 @@ describe('Copay server', function() {
         address.address.should.equal('3KxttbKQQPWmpsnXZ3rB4mgJTuLnVR7frg');
         address.isChange.should.be.false;
         address.path.should.equal('m/2147483647/0/0');
-        done();
+        server.getNotifications({}, function(err, notifications) {
+          should.not.exist(err);
+          var notif = _.find(notifications, {
+            type: 'NewAddress'
+          });
+          should.exist(notif);
+          notif.data.address.should.equal('3KxttbKQQPWmpsnXZ3rB4mgJTuLnVR7frg');
+          done();
+        });
       });
     });
 
