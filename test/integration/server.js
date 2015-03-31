@@ -621,6 +621,30 @@ describe('Wallet service', function() {
       });
     });
 
+
+    it('should create a change address', function(done) {
+      server.createAddress({
+        isChange: true
+      }, function(err, address) {
+        should.not.exist(err);
+        address.should.exist;
+        address.address.should.equal('3Cdw1JurXBvZFFkPRRJk2a9Uf4WQ5MC5kz');
+        address.isChange.should.be.true;
+        address.path.should.equal('m/2147483647/1/0');
+        server.getNotifications({}, function(err, notifications) {
+          should.not.exist(err);
+          var notif = _.find(notifications, {
+            type: 'NewAddress'
+          });
+          should.exist(notif);
+          notif.data.address.should.equal('3Cdw1JurXBvZFFkPRRJk2a9Uf4WQ5MC5kz');
+          done();
+        });
+      });
+    });
+
+
+
     it('should create many addresses on simultaneous requests', function(done) {
       var N = 5;
       async.map(_.range(N), function(i, cb) {
