@@ -293,6 +293,43 @@ describe('Wallet service', function() {
       });
     });
 
+
+    it('should create  wallet with given id', function(done) {
+      var opts = {
+        name: 'my wallet',
+        m: 2,
+        n: 3,
+        pubKey: TestData.keyPair.pub,
+        id: '1234',
+      };
+      server.createWallet(opts, function(err, walletId) {
+        should.not.exist(err);
+        server.storage.fetchWallet('1234', function(err, wallet) {
+          should.not.exist(err);
+          wallet.id.should.equal(walletId);
+          wallet.name.should.equal('my wallet');
+          done();
+        });
+      });
+    });
+
+    it('should fail to create wallets with same id', function(done) {
+      var opts = {
+        name: 'my wallet',
+        m: 2,
+        n: 3,
+        pubKey: TestData.keyPair.pub,
+        id: '1234',
+      };
+      server.createWallet(opts, function(err, walletId) {
+        server.createWallet(opts, function(err, walletId) {
+          err.message.should.contain('Wallet already exists');
+          done();
+        });
+      });
+    });
+
+
     it('should fail to create wallet with no name', function(done) {
       var opts = {
         name: '',
@@ -620,6 +657,30 @@ describe('Wallet service', function() {
         });
       });
     });
+
+
+    it('should create a change address', function(done) {
+      server.createAddress({
+        isChange: true
+      }, function(err, address) {
+        should.not.exist(err);
+        address.should.exist;
+        address.address.should.equal('3Cdw1JurXBvZFFkPRRJk2a9Uf4WQ5MC5kz');
+        address.isChange.should.be.true;
+        address.path.should.equal('m/2147483647/1/0');
+        server.getNotifications({}, function(err, notifications) {
+          should.not.exist(err);
+          var notif = _.find(notifications, {
+            type: 'NewAddress'
+          });
+          should.exist(notif);
+          notif.data.address.should.equal('3Cdw1JurXBvZFFkPRRJk2a9Uf4WQ5MC5kz');
+          done();
+        });
+      });
+    });
+
+
 
     it('should create many addresses on simultaneous requests', function(done) {
       var N = 5;
