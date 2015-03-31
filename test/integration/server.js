@@ -293,6 +293,43 @@ describe('Wallet service', function() {
       });
     });
 
+
+    it('should create  wallet with given id', function(done) {
+      var opts = {
+        name: 'my wallet',
+        m: 2,
+        n: 3,
+        pubKey: TestData.keyPair.pub,
+        id: '1234',
+      };
+      server.createWallet(opts, function(err, walletId) {
+        should.not.exist(err);
+        server.storage.fetchWallet('1234', function(err, wallet) {
+          should.not.exist(err);
+          wallet.id.should.equal(walletId);
+          wallet.name.should.equal('my wallet');
+          done();
+        });
+      });
+    });
+
+    it('should fail to create wallets with same id', function(done) {
+      var opts = {
+        name: 'my wallet',
+        m: 2,
+        n: 3,
+        pubKey: TestData.keyPair.pub,
+        id: '1234',
+      };
+      server.createWallet(opts, function(err, walletId) {
+        server.createWallet(opts, function(err, walletId) {
+          err.message.should.contain('Wallet already exists');
+          done();
+        });
+      });
+    });
+
+
     it('should fail to create wallet with no name', function(done) {
       var opts = {
         name: '',
