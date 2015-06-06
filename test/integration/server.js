@@ -2556,7 +2556,7 @@ describe('Wallet service', function() {
       });
     });
 
-    it('should allow creator to remove an signed TX by himself', function(done) {
+    it('should allow creator to remove a signed TX by himself', function(done) {
       var signatures = helpers.clientSign(txp, TestData.copayers[0].xPrivKey);
       server.signTx({
         txProposalId: txp.id,
@@ -2641,7 +2641,7 @@ describe('Wallet service', function() {
       });
     });
 
-    it('should not allow creator copayer to remove an TX signed by other copayer', function(done) {
+    it('should allow creator copayer to remove a TX signed by other copayer', function(done) {
       helpers.getAuthServer(wallet.copayers[1].id, function(server2) {
         var signatures = helpers.clientSign(txp, TestData.copayers[1].xPrivKey);
         server2.signTx({
@@ -2652,9 +2652,11 @@ describe('Wallet service', function() {
           server.removePendingTx({
             txProposalId: txp.id
           }, function(err) {
-            err.code.should.equal('TXACTIONED');
-            err.message.should.contain('other copayers');
-            done();
+            should.not.exist(err);
+            server.getPendingTxs({}, function(err, txs) {
+              txs.length.should.equal(0);
+              done();
+            });
           });
         });
       });
