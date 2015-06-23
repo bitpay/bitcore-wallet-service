@@ -76,12 +76,9 @@ helpers.getSignedCopayerOpts = function(opts) {
   return opts;
 };
 
-helpers.createAndJoinWallet = function(m, n, opts, cb) {
-  if (_.isFunction(opts)) {
-    cb = opts;
-    opts = {};
-  }
-  opts = opts || {};
+helpers.createAndJoinWallet = function(m, n, cb) {
+  console.log('debug createAndJoinWallet 1');
+  var opts = {};
 
   var server = new WalletService();
   var copayerIds = [];
@@ -93,10 +90,13 @@ helpers.createAndJoinWallet = function(m, n, opts, cb) {
     n: n,
     pubKey: TestData.keyPair.pub,
   };
+  console.log('debug createAndJoinWallet 2');
   server.createWallet(walletOpts, function(err, walletId) {
+    console.log('debug createAndJoinWallet 3');
     if (err) return cb(err);
 
     async.each(_.range(n), function(i, cb) {
+      console.log('debug createAndJoinWallet 4.'+i);
       var copayerOpts = helpers.getSignedCopayerOpts({
         walletId: walletId,
         name: 'copayer ' + (i + 1),
@@ -105,15 +105,18 @@ helpers.createAndJoinWallet = function(m, n, opts, cb) {
       });
 
       server.joinWallet(copayerOpts, function(err, result) {
+        console.log('debug createAndJoinWallet 5.'+i);
         should.not.exist(err);
         copayerIds.push(result.copayerId);
         return cb(err);
       });
     }, function(err) {
+      console.log('debug createAndJoinWallet 6');
       if (err) return new Error('Could not generate wallet');
 
       helpers.getAuthServer(copayerIds[0], function(s) {
         s.getWallet({}, function(err, w) {
+          console.log('debug createAndJoinWallet 7');
           cb(s, w);
         });
       });
@@ -268,27 +271,27 @@ describe('Wallet service', function() {
     var server, wallet, clock;
 
     beforeEach(function(done) {
-      console.log('debug 1');
+      console.log('debug beforeEach 1');
       this.timeout(5000);
-      console.log('debug 2');
+      console.log('debug beforeEach 2');
       clock = sinon.useFakeTimers();
-      console.log('debug 3');
+      console.log('debug beforeEach 3');
       helpers.createAndJoinWallet(1, 1, function(s, w) {
-        console.log('debug 4');
+        console.log('debug beforeEach 4');
         server = s;
         wallet = w;
         helpers.stubUtxos(server, wallet, _.range(10), function() {
-          console.log('debug 5');
+          console.log('debug beforeEach 5');
           var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.1, null, TestData.copayers[0].privKey_1H_0);
           async.eachSeries(_.range(10), function(i, next) {
-            console.log('debug 6.'+i);
+            console.log('debug beforeEach 6.'+i);
             clock.tick(10 * 1000);
             server.createTx(txOpts, function(err, tx) {
-              console.log('debug 7.'+i);
+              console.log('debug beforeEach 7.'+i);
               next();
             });
           }, function(err) {
-            console.log('debug 8');
+            console.log('debug beforeEach 8');
             clock.restore();
             return done(err);
           });
@@ -296,7 +299,7 @@ describe('Wallet service', function() {
       });
     });
     afterEach(function() {
-      console.log('debug 0');
+      console.log('debug beforeEach 0');
       clock.restore();
     });
 
