@@ -264,6 +264,315 @@ describe('Wallet service', function() {
     WalletService.shutDown(done);
   });
 
+  describe('#getTxs', function() {
+    var server, wallet, clock;
+
+    beforeEach(function(done) {
+      this.timeout(5000);
+      clock = sinon.useFakeTimers();
+      helpers.createAndJoinWallet(1, 1, function(s, w) {
+        server = s;
+        wallet = w;
+        helpers.stubUtxos(server, wallet, _.range(10), function() {
+          var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.1, null, TestData.copayers[0].privKey_1H_0);
+          async.eachSeries(_.range(10), function(i, next) {
+            clock.tick(10 * 1000);
+            server.createTx(txOpts, function(err, tx) {
+              next();
+            });
+          }, function(err) {
+            clock.restore();
+            return done(err);
+          });
+        });
+      });
+    });
+    afterEach(function() {
+      clock.restore();
+    });
+
+    it('should pull 4 txs, down to to time 60', function(done) {
+      server.getTxs({
+        minTs: 60,
+        limit: 8
+      }, function(err, txps) {
+        should.not.exist(err);
+        var times = _.pluck(txps, 'createdOn');
+        times.should.deep.equal([90, 80, 70, 60]);
+        done();
+      });
+    });
+
+    it('should pull the first 5 txs', function(done) {
+      server.getTxs({
+        maxTs: 50,
+        limit: 5
+      }, function(err, txps) {
+        should.not.exist(err);
+        var times = _.pluck(txps, 'createdOn');
+        times.should.deep.equal([50, 40, 30, 20, 10]);
+        done();
+      });
+    });
+
+    it('should pull the last 4 txs', function(done) {
+      server.getTxs({
+        limit: 4
+      }, function(err, txps) {
+        should.not.exist(err);
+        var times = _.pluck(txps, 'createdOn');
+        times.should.deep.equal([90, 80, 70, 60]);
+        done();
+      });
+    });
+
+    it('should pull all txs', function(done) {
+      server.getTxs({}, function(err, txps) {
+        should.not.exist(err);
+        var times = _.pluck(txps, 'createdOn');
+        times.should.deep.equal([90, 80, 70, 60, 50, 40, 30, 20, 10]);
+        done();
+      });
+    });
+
+
+    it('should txs from times 50 to 70',
+      function(done) {
+        server.getTxs({
+          minTs: 50,
+          maxTs: 70,
+        }, function(err, txps) {
+          should.not.exist(err);
+          var times = _.pluck(txps, 'createdOn');
+          times.should.deep.equal([70, 60, 50]);
+          done();
+        });
+      });
+  });
+
+  describe('#createTx backoff time', function(done) {
+    var server, wallet, txid;
+
+    beforeEach(function(done) {
+      helpers.createAndJoinWallet(2, 2, function(s, w) {
+        server = s;
+        wallet = w;
+        helpers.stubUtxos(server, wallet, _.range(2, 6), function() {
+          done();
+        });
+      });
+    });
+
+    it('should follow backoff time after consecutive rejections', function(done) {
+      async.series([
+
+        function(next) {
+          async.each(_.range(3), function(i, next) {
+              var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, null, TestData.copayers[0].privKey_1H_0);
+              server.createTx(txOpts, function(err, tx) {
+                should.not.exist(err);
+                server.rejectTx({
+                  txProposalId: tx.id,
+                  reason: 'some reason',
+                }, next);
+              });
+            },
+            next);
+        },
+        function(next) {
+          // Allow a 4th tx
+          var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, null, TestData.copayers[0].privKey_1H_0);
+          server.createTx(txOpts, function(err, tx) {
+            server.rejectTx({
+              txProposalId: tx.id,
+              reason: 'some reason',
+            }, next);
+          });
+        },
+        function(next) {
+          // Do not allow before backoff time
+          var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, null, TestData.copayers[0].privKey_1H_0);
+          server.createTx(txOpts, function(err, tx) {
+            should.exist(err);
+            err.code.should.equal('NOTALLOWEDTOCREATETX');
+            next();
+          });
+        },
+        function(next) {
+          var clock = sinon.useFakeTimers(Date.now() + (WalletService.backoffTimeMinutes + 2) * 60 * 1000);
+          var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, null, TestData.copayers[0].privKey_1H_0);
+          server.createTx(txOpts, function(err, tx) {
+            clock.restore();
+            server.rejectTx({
+              txProposalId: tx.id,
+              reason: 'some reason',
+            }, next);
+          });
+        },
+        function(next) {
+          // Do not allow a 5th tx before backoff time
+          var clock = sinon.useFakeTimers(Date.now() + (WalletService.backoffTimeMinutes + 2) * 60 * 1000 + 1);
+          var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, null, TestData.copayers[0].privKey_1H_0);
+          server.createTx(txOpts, function(err, tx) {
+            clock.restore();
+            should.exist(err);
+            err.code.should.equal('NOTALLOWEDTOCREATETX');
+            next();
+          });
+        },
+      ], function(err) {
+        should.not.exist(err);
+        done();
+      });
+    });
+  });
+
+
+  describe('#broadcastTx', function() {
+    var server, wallet, txpid;
+    beforeEach(function(done) {
+      helpers.createAndJoinWallet(1, 1, function(s, w) {
+        server = s;
+        wallet = w;
+        helpers.stubUtxos(server, wallet, [10, 10], function() {
+          var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 9, 'some message', TestData.copayers[0].privKey_1H_0);
+          server.createTx(txOpts, function(err, txp) {
+            should.not.exist(err);
+            should.exist(txp);
+            var signatures = helpers.clientSign(txp, TestData.copayers[0].xPrivKey);
+            server.signTx({
+              txProposalId: txp.id,
+              signatures: signatures,
+            }, function(err, txp) {
+              should.not.exist(err);
+              should.exist(txp);
+              txp.isAccepted().should.be.true;
+              txp.isBroadcasted().should.be.false;
+              txpid = txp.id;
+              done();
+            });
+          });
+        });
+      });
+    });
+
+    it('should broadcast a tx', function(done) {
+      var clock = sinon.useFakeTimers(1234000);
+      helpers.stubBroadcast('999');
+      server.broadcastTx({
+        txProposalId: txpid
+      }, function(err) {
+        should.not.exist(err);
+        server.getTx({
+          txProposalId: txpid
+        }, function(err, txp) {
+          should.not.exist(err);
+          txp.txid.should.equal('999');
+          txp.isBroadcasted().should.be.true;
+          txp.broadcastedOn.should.equal(1234);
+          clock.restore();
+          done();
+        });
+      });
+    });
+
+    it('should fail to brodcast a tx already marked as broadcasted', function(done) {
+      helpers.stubBroadcast('999');
+      server.broadcastTx({
+        txProposalId: txpid
+      }, function(err) {
+        should.not.exist(err);
+        server.broadcastTx({
+          txProposalId: txpid
+        }, function(err) {
+          should.exist(err);
+          err.code.should.equal('TXALREADYBROADCASTED');
+          done();
+        });
+      });
+    });
+
+    it('should fail to brodcast a not yet accepted tx', function(done) {
+      helpers.stubBroadcast('999');
+      var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 9, 'some other message', TestData.copayers[0].privKey_1H_0);
+      server.createTx(txOpts, function(err, txp) {
+        should.not.exist(err);
+        should.exist(txp);
+        server.broadcastTx({
+          txProposalId: txp.id
+        }, function(err) {
+          should.exist(err);
+          err.code.should.equal('TXNOTACCEPTED');
+          done();
+        });
+      });
+    });
+
+    it('should keep tx as accepted if unable to broadcast it', function(done) {
+      helpers.stubBroadcastFail();
+      blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, null, null);
+      server.broadcastTx({
+        txProposalId: txpid
+      }, function(err) {
+        should.exist(err);
+        err.code.should.equal('BLOCKCHAINERROR');
+        server.getTx({
+          txProposalId: txpid
+        }, function(err, txp) {
+          should.not.exist(err);
+          should.not.exist(txp.txid);
+          txp.isBroadcasted().should.be.false;
+          should.not.exist(txp.broadcastedOn);
+          txp.isAccepted().should.be.true;
+          done();
+        });
+      });
+    });
+
+    it('should mark tx as broadcasted if accepted but already in blockchain', function(done) {
+      helpers.stubBroadcastFail();
+      blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, null, {
+        txid: '999'
+      });
+      server.broadcastTx({
+        txProposalId: txpid
+      }, function(err) {
+        should.not.exist(err);
+        server.getTx({
+          txProposalId: txpid
+        }, function(err, txp) {
+          should.not.exist(err);
+          should.exist(txp.txid);
+          txp.txid.should.equal('999');
+          txp.isBroadcasted().should.be.true;
+          should.exist(txp.broadcastedOn);
+          done();
+        });
+      });
+    });
+
+    it('should keep tx as accepted if broadcast fails and cannot check tx in blockchain', function(done) {
+      helpers.stubBroadcastFail();
+      blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, 'bc check error');
+      server.broadcastTx({
+        txProposalId: txpid
+      }, function(err) {
+        should.exist(err);
+        err.code.should.equal('BLOCKCHAINERROR');
+        server.getTx({
+          txProposalId: txpid
+        }, function(err, txp) {
+          should.not.exist(err);
+          should.not.exist(txp.txid);
+          txp.isBroadcasted().should.be.false;
+          should.not.exist(txp.broadcastedOn);
+          txp.isAccepted().should.be.true;
+          done();
+        });
+      });
+    });
+  });
+
   describe('Email notifications', function() {
     var server, wallet, mailerStub, emailService;
 
@@ -1685,83 +1994,6 @@ describe('Wallet service', function() {
     });
   });
 
-  describe.skip('#createTx backoff time', function(done) {
-    var server, wallet, txid;
-
-    beforeEach(function(done) {
-      helpers.createAndJoinWallet(2, 2, function(s, w) {
-        server = s;
-        wallet = w;
-        helpers.stubUtxos(server, wallet, _.range(2, 6), function() {
-          done();
-        });
-      });
-    });
-
-    it('should follow backoff time after consecutive rejections', function(done) {
-      async.series([
-
-        function(next) {
-          async.each(_.range(3), function(i, next) {
-              var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, null, TestData.copayers[0].privKey_1H_0);
-              server.createTx(txOpts, function(err, tx) {
-                should.not.exist(err);
-                server.rejectTx({
-                  txProposalId: tx.id,
-                  reason: 'some reason',
-                }, next);
-              });
-            },
-            next);
-        },
-        function(next) {
-          // Allow a 4th tx
-          var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, null, TestData.copayers[0].privKey_1H_0);
-          server.createTx(txOpts, function(err, tx) {
-            server.rejectTx({
-              txProposalId: tx.id,
-              reason: 'some reason',
-            }, next);
-          });
-        },
-        function(next) {
-          // Do not allow before backoff time
-          var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, null, TestData.copayers[0].privKey_1H_0);
-          server.createTx(txOpts, function(err, tx) {
-            should.exist(err);
-            err.code.should.equal('NOTALLOWEDTOCREATETX');
-            next();
-          });
-        },
-        function(next) {
-          var clock = sinon.useFakeTimers(Date.now() + (WalletService.backoffTimeMinutes + 2) * 60 * 1000);
-          var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, null, TestData.copayers[0].privKey_1H_0);
-          server.createTx(txOpts, function(err, tx) {
-            clock.restore();
-            server.rejectTx({
-              txProposalId: tx.id,
-              reason: 'some reason',
-            }, next);
-          });
-        },
-        function(next) {
-          // Do not allow a 5th tx before backoff time
-          var clock = sinon.useFakeTimers(Date.now() + (WalletService.backoffTimeMinutes + 2) * 60 * 1000 + 1);
-          var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, null, TestData.copayers[0].privKey_1H_0);
-          server.createTx(txOpts, function(err, tx) {
-            clock.restore();
-            should.exist(err);
-            err.code.should.equal('NOTALLOWEDTOCREATETX');
-            next();
-          });
-        },
-      ], function(err) {
-        should.not.exist(err);
-        done();
-      });
-    });
-  });
-
   describe('#rejectTx', function() {
     var server, wallet, txid;
 
@@ -2058,151 +2290,6 @@ describe('Wallet service', function() {
     });
   });
 
-  describe.skip('#broadcastTx', function() {
-    var server, wallet, txpid;
-    beforeEach(function(done) {
-      helpers.createAndJoinWallet(1, 1, function(s, w) {
-        server = s;
-        wallet = w;
-        helpers.stubUtxos(server, wallet, [10, 10], function() {
-          var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 9, 'some message', TestData.copayers[0].privKey_1H_0);
-          server.createTx(txOpts, function(err, txp) {
-            should.not.exist(err);
-            should.exist(txp);
-            var signatures = helpers.clientSign(txp, TestData.copayers[0].xPrivKey);
-            server.signTx({
-              txProposalId: txp.id,
-              signatures: signatures,
-            }, function(err, txp) {
-              should.not.exist(err);
-              should.exist(txp);
-              txp.isAccepted().should.be.true;
-              txp.isBroadcasted().should.be.false;
-              txpid = txp.id;
-              done();
-            });
-          });
-        });
-      });
-    });
-
-    it('should broadcast a tx', function(done) {
-      var clock = sinon.useFakeTimers(1234000);
-      helpers.stubBroadcast('999');
-      server.broadcastTx({
-        txProposalId: txpid
-      }, function(err) {
-        should.not.exist(err);
-        server.getTx({
-          txProposalId: txpid
-        }, function(err, txp) {
-          should.not.exist(err);
-          txp.txid.should.equal('999');
-          txp.isBroadcasted().should.be.true;
-          txp.broadcastedOn.should.equal(1234);
-          clock.restore();
-          done();
-        });
-      });
-    });
-
-    it('should fail to brodcast a tx already marked as broadcasted', function(done) {
-      helpers.stubBroadcast('999');
-      server.broadcastTx({
-        txProposalId: txpid
-      }, function(err) {
-        should.not.exist(err);
-        server.broadcastTx({
-          txProposalId: txpid
-        }, function(err) {
-          should.exist(err);
-          err.code.should.equal('TXALREADYBROADCASTED');
-          done();
-        });
-      });
-    });
-
-    it('should fail to brodcast a not yet accepted tx', function(done) {
-      helpers.stubBroadcast('999');
-      var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 9, 'some other message', TestData.copayers[0].privKey_1H_0);
-      server.createTx(txOpts, function(err, txp) {
-        should.not.exist(err);
-        should.exist(txp);
-        server.broadcastTx({
-          txProposalId: txp.id
-        }, function(err) {
-          should.exist(err);
-          err.code.should.equal('TXNOTACCEPTED');
-          done();
-        });
-      });
-    });
-
-    it('should keep tx as accepted if unable to broadcast it', function(done) {
-      helpers.stubBroadcastFail();
-      blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, null, null);
-      server.broadcastTx({
-        txProposalId: txpid
-      }, function(err) {
-        should.exist(err);
-        err.code.should.equal('BLOCKCHAINERROR');
-        server.getTx({
-          txProposalId: txpid
-        }, function(err, txp) {
-          should.not.exist(err);
-          should.not.exist(txp.txid);
-          txp.isBroadcasted().should.be.false;
-          should.not.exist(txp.broadcastedOn);
-          txp.isAccepted().should.be.true;
-          done();
-        });
-      });
-    });
-
-    it('should mark tx as broadcasted if accepted but already in blockchain', function(done) {
-      helpers.stubBroadcastFail();
-      blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, null, {
-        txid: '999'
-      });
-      server.broadcastTx({
-        txProposalId: txpid
-      }, function(err) {
-        should.not.exist(err);
-        server.getTx({
-          txProposalId: txpid
-        }, function(err, txp) {
-          should.not.exist(err);
-          should.exist(txp.txid);
-          txp.txid.should.equal('999');
-          txp.isBroadcasted().should.be.true;
-          should.exist(txp.broadcastedOn);
-          done();
-        });
-      });
-    });
-
-    it('should keep tx as accepted if broadcast fails and cannot check tx in blockchain', function(done) {
-      helpers.stubBroadcastFail();
-      blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, 'bc check error');
-      server.broadcastTx({
-        txProposalId: txpid
-      }, function(err) {
-        should.exist(err);
-        err.code.should.equal('BLOCKCHAINERROR');
-        server.getTx({
-          txProposalId: txpid
-        }, function(err, txp) {
-          should.not.exist(err);
-          should.not.exist(txp.txid);
-          txp.isBroadcasted().should.be.false;
-          should.not.exist(txp.broadcastedOn);
-          txp.isAccepted().should.be.true;
-          done();
-        });
-      });
-    });
-  });
-
   describe('Tx proposal workflow', function() {
     var server, wallet;
     beforeEach(function(done) {
@@ -2453,92 +2540,6 @@ describe('Wallet service', function() {
     });
     it.skip('should get accepted/rejected transaction proposal', function(done) {});
     it.skip('should get broadcasted transaction proposal', function(done) {});
-  });
-
-  describe('#getTxs', function() {
-    var server, wallet, clock;
-
-    beforeEach(function(done) {
-      this.timeout(5000);
-      clock = sinon.useFakeTimers();
-      helpers.createAndJoinWallet(1, 1, function(s, w) {
-        server = s;
-        wallet = w;
-        helpers.stubUtxos(server, wallet, _.range(10), function() {
-          var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.1, null, TestData.copayers[0].privKey_1H_0);
-          async.eachSeries(_.range(10), function(i, next) {
-            clock.tick(10 * 1000);
-            server.createTx(txOpts, function(err, tx) {
-              next();
-            });
-          }, function(err) {
-            clock.restore();
-            return done(err);
-          });
-        });
-      });
-    });
-    afterEach(function() {
-      clock.restore();
-    });
-
-    it('should pull 4 txs, down to to time 60', function(done) {
-      server.getTxs({
-        minTs: 60,
-        limit: 8
-      }, function(err, txps) {
-        should.not.exist(err);
-        var times = _.pluck(txps, 'createdOn');
-        times.should.deep.equal([90, 80, 70, 60]);
-        done();
-      });
-    });
-
-    it('should pull the first 5 txs', function(done) {
-      server.getTxs({
-        maxTs: 50,
-        limit: 5
-      }, function(err, txps) {
-        should.not.exist(err);
-        var times = _.pluck(txps, 'createdOn');
-        times.should.deep.equal([50, 40, 30, 20, 10]);
-        done();
-      });
-    });
-
-    it('should pull the last 4 txs', function(done) {
-      server.getTxs({
-        limit: 4
-      }, function(err, txps) {
-        should.not.exist(err);
-        var times = _.pluck(txps, 'createdOn');
-        times.should.deep.equal([90, 80, 70, 60]);
-        done();
-      });
-    });
-
-    it('should pull all txs', function(done) {
-      server.getTxs({}, function(err, txps) {
-        should.not.exist(err);
-        var times = _.pluck(txps, 'createdOn');
-        times.should.deep.equal([90, 80, 70, 60, 50, 40, 30, 20, 10]);
-        done();
-      });
-    });
-
-
-    it('should txs from times 50 to 70',
-      function(done) {
-        server.getTxs({
-          minTs: 50,
-          maxTs: 70,
-        }, function(err, txps) {
-          should.not.exist(err);
-          var times = _.pluck(txps, 'createdOn');
-          times.should.deep.equal([70, 60, 50]);
-          done();
-        });
-      });
   });
 
   describe('Notifications', function() {
