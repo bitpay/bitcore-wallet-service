@@ -248,6 +248,7 @@ function resetStorage(cb) {
 
 
 describe('Wallet service', function() {
+  this.timeout(20000);
   before(function(done) {
     initStorage(done);
   });
