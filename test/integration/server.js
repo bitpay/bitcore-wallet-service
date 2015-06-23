@@ -253,12 +253,16 @@ describe('Wallet service', function() {
   });
   beforeEach(function(done) {
     resetStorage(function() {
-      blockchainExplorer = sinon.stub();
+      blockchainExplorer = sinon.sandbox.create();
       WalletService.initialize({
         storage: storage,
         blockchainExplorer: blockchainExplorer,
       }, done);
     });
+  });
+  afterEach(function(done) {
+    blockchainExplorer.restore();
+    done();
   });
   after(function(done) {
     WalletService.shutDown(done);
