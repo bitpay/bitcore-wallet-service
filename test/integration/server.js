@@ -1686,7 +1686,7 @@ describe('Wallet service', function() {
     });
   });
 
-  describe.only('#createTx backoff time', function(done) {
+  describe('#createTx backoff time', function(done) {
     var server, wallet, txid;
 
     beforeEach(function(done) {
@@ -1699,7 +1699,7 @@ describe('Wallet service', function() {
       });
     });
 
-    it('should follow backoff time after consecutive rejections', function(done) {
+    it.only('should follow backoff time after consecutive rejections', function(done) {
       async.series([
 
         function(next) {
@@ -1741,7 +1741,7 @@ describe('Wallet service', function() {
         },
         function(next) {
           log.error("6");
-          var clock = sinon.useFakeTimers(Date.now() + (WalletService.backoffTimeMinutes + 2) * 60 * 1000);
+          // var clock = sinon.useFakeTimers(Date.now() + (WalletService.backoffTimeMinutes + 2) * 60 * 1000);
           var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, null, TestData.copayers[0].privKey_1H_0);
           log.error("7");
           server.createTx(txOpts, function(err, tx) {
