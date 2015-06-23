@@ -103,20 +103,21 @@ helpers.createAndJoinWallet = function(m, n, cb) {
         xPubKey: TestData.copayers[i + offset].xPubKey_45H,
         requestPubKey: TestData.copayers[i + offset].pubKey_1H_0,
       });
+      console.log('debug createAndJoinWallet 5.'+i);
 
       server.joinWallet(copayerOpts, function(err, result) {
-        console.log('debug createAndJoinWallet 5.'+i);
+        console.log('debug createAndJoinWallet 6.'+i);
         should.not.exist(err);
         copayerIds.push(result.copayerId);
         return cb(err);
       });
     }, function(err) {
-      console.log('debug createAndJoinWallet 6');
+      console.log('debug createAndJoinWallet 7');
       if (err) return new Error('Could not generate wallet');
 
       helpers.getAuthServer(copayerIds[0], function(s) {
         s.getWallet({}, function(err, w) {
-          console.log('debug createAndJoinWallet 7');
+          console.log('debug createAndJoinWallet 8');
           cb(s, w);
         });
       });
