@@ -1746,7 +1746,7 @@ describe('Wallet service', function() {
           log.error("7");
           server.createTx(txOpts, function(err, tx) {
             log.error("8");
-            clock.restore();
+            // clock.restore();
             server.rejectTx({
               txProposalId: tx.id,
               reason: 'some reason',
