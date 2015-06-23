@@ -1686,7 +1686,7 @@ describe('Wallet service', function() {
     });
   });
 
-  describe('#createTx backoff time', function(done) {
+  describe.only('#createTx backoff time', function(done) {
     var server, wallet, txid;
 
     beforeEach(function(done) {
