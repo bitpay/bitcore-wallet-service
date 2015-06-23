@@ -253,16 +253,12 @@ describe('Wallet service', function() {
   });
   beforeEach(function(done) {
     resetStorage(function() {
-      blockchainExplorer = sinon.sandbox.create();
+      blockchainExplorer = sinon.stub();
       WalletService.initialize({
         storage: storage,
         blockchainExplorer: blockchainExplorer,
       }, done);
     });
-  });
-  afterEach(function(done) {
-    blockchainExplorer.restore();
-    done();
   });
   after(function(done) {
     WalletService.shutDown(done);
@@ -272,19 +268,27 @@ describe('Wallet service', function() {
     var server, wallet, clock;
 
     beforeEach(function(done) {
+      console.log('debug 1');
       this.timeout(5000);
+      console.log('debug 2');
       clock = sinon.useFakeTimers();
+      console.log('debug 3');
       helpers.createAndJoinWallet(1, 1, function(s, w) {
+        console.log('debug 4');
         server = s;
         wallet = w;
         helpers.stubUtxos(server, wallet, _.range(10), function() {
+          console.log('debug 5');
           var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.1, null, TestData.copayers[0].privKey_1H_0);
           async.eachSeries(_.range(10), function(i, next) {
+            console.log('debug 6.'+i);
             clock.tick(10 * 1000);
             server.createTx(txOpts, function(err, tx) {
+              console.log('debug 7.'+i);
               next();
             });
           }, function(err) {
+            console.log('debug 8');
             clock.restore();
             return done(err);
           });
@@ -292,6 +296,7 @@ describe('Wallet service', function() {
       });
     });
     afterEach(function() {
+      console.log('debug 0');
       clock.restore();
     });
 
