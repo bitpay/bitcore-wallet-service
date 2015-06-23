@@ -248,6 +248,7 @@ function resetStorage(cb) {
 
 
 describe('Wallet service', function() {
+  this.timeout(20000);
   before(function(done) {
     initStorage(done);
   });
@@ -1698,13 +1699,15 @@ describe('Wallet service', function() {
       });
     });
 
-    it('should follow backoff time after consecutive rejections', function(done) {
+    it.only('should follow backoff time after consecutive rejections', function(done) {
       async.series([
 
         function(next) {
           async.each(_.range(3), function(i, next) {
+              log.error("1");
               var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, null, TestData.copayers[0].privKey_1H_0);
               server.createTx(txOpts, function(err, tx) {
+                log.error("2");
                 should.not.exist(err);
                 server.rejectTx({
                   txProposalId: tx.id,
@@ -1718,6 +1721,7 @@ describe('Wallet service', function() {
           // Allow a 4th tx
           var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, null, TestData.copayers[0].privKey_1H_0);
           server.createTx(txOpts, function(err, tx) {
+            log.error("3");
             server.rejectTx({
               txProposalId: tx.id,
               reason: 'some reason',
@@ -1726,18 +1730,23 @@ describe('Wallet service', function() {
         },
         function(next) {
           // Do not allow before backoff time
+          log.error("4");
           var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, null, TestData.copayers[0].privKey_1H_0);
           server.createTx(txOpts, function(err, tx) {
+            log.error("5");
             should.exist(err);
             err.code.should.equal('NOTALLOWEDTOCREATETX');
             next();
           });
         },
         function(next) {
-          var clock = sinon.useFakeTimers(Date.now() + (WalletService.backoffTimeMinutes + 2) * 60 * 1000);
+          log.error("6");
+          // var clock = sinon.useFakeTimers(Date.now() + (WalletService.backoffTimeMinutes + 2) * 60 * 1000);
           var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, null, TestData.copayers[0].privKey_1H_0);
+          log.error("7");
           server.createTx(txOpts, function(err, tx) {
-            clock.restore();
+            log.error("8");
+            // clock.restore();
             server.rejectTx({
               txProposalId: tx.id,
               reason: 'some reason',
@@ -1745,10 +1754,13 @@ describe('Wallet service', function() {
           });
         },
         function(next) {
+          log.error("9");
           // Do not allow a 5th tx before backoff time
           var clock = sinon.useFakeTimers(Date.now() + (WalletService.backoffTimeMinutes + 2) * 60 * 1000 + 1);
           var txOpts = helpers.createProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, null, TestData.copayers[0].privKey_1H_0);
+          log.error("10");
           server.createTx(txOpts, function(err, tx) {
+            log.error("11");
             clock.restore();
             should.exist(err);
             err.code.should.equal('NOTALLOWEDTOCREATETX');
@@ -1756,6 +1768,7 @@ describe('Wallet service', function() {
           });
         },
       ], function(err) {
+        log.error("12");
         should.not.exist(err);
         done();
       });
