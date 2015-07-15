@@ -280,7 +280,7 @@ helpers.createAddresses = function(server, wallet, main, change, cb) {
 
 var storage, blockchainExplorer;
 
-var useMongo = false;
+var useMongo = true;
 
 function initStorage(cb) {
   function getDb(cb) {
@@ -3610,6 +3610,21 @@ describe('Wallet service', function() {
         done();
       });
     });
+
+    it.only('should get tx history from insight (case2', function(done) {
+      helpers.stubHistory(TestData.history2);
+      sinon.stub(server.storage, 'fetchAddresses').yields(null, TestData.addrForHistory2);
+      server.getTxHistory({}, function(err, txs) {
+        should.not.exist(err);
+        should.exist(txs);
+        txs.length.should.equal(1);
+console.log('[server.js.3620:txs:]',txs); //TODO
+        txs[0].action.should.equal('sent');
+        txs[0].amount.should.equal(TestData.history2[0].vout[1].value * 100000000);
+        done();
+      });
+    });
+
   });
 
   describe('#scan', function() {
