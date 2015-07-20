@@ -186,8 +186,121 @@ var history = [{
   valueIn: 0.00045753,
   fees: 0.00014299
 }];
+var history2 = [{
+  "txid": "eb52e9e04589858ec405fe869b63046cb752f977fd7d2423ea968b321832058c",
+  "version": 1,
+  "locktime": 0,
+  "vin": [{
+    "txid": "dde4badfcea3000b1fd1f13534e7cc2c8379f02de400807175e265e9e7dd0338",
+    "vout": 0,
+    "scriptSig": {
+      "asm": "0 3045022100fe6c211cc286cb7dffb7d2bdccbecef335a1fd943515f5d53c5ac867587fedcd022048d1fd35d50b5d27d5a9a473f2aecba9c0405809658c06860b666344fca595a701 304402204f2e5e4d35aa12fa991a70f5dd4609076a1327efc5d962231bb0f91cbb0f4d6a022017c321969e206c21a135c55e4b6413ed7a6c73899cd195207d40f84b5b8e8d9001 5221031f59e24cb22833aad185ab9cf2e7c673f5a6f6a0d1901396ca522f761abdf57a2103c4b9a8c50781bb9345f06573e56909ad566e5a1e2dbb2ae18872b98356ad9e652103d90bccb1de2716865deb8237158f33f23930661e83a4f46ff99b6bfb61b0c26753ae",
+      "hex": "00483045022100fe6c211cc286cb7dffb7d2bdccbecef335a1fd943515f5d53c5ac867587fedcd022048d1fd35d50b5d27d5a9a473f2aecba9c0405809658c06860b666344fca595a70147304402204f2e5e4d35aa12fa991a70f5dd4609076a1327efc5d962231bb0f91cbb0f4d6a022017c321969e206c21a135c55e4b6413ed7a6c73899cd195207d40f84b5b8e8d90014c695221031f59e24cb22833aad185ab9cf2e7c673f5a6f6a0d1901396ca522f761abdf57a2103c4b9a8c50781bb9345f06573e56909ad566e5a1e2dbb2ae18872b98356ad9e652103d90bccb1de2716865deb8237158f33f23930661e83a4f46ff99b6bfb61b0c26753ae"
+    },
+    "sequence": 4294967295,
+    "n": 0,
+    "addr": "3LotYiK134bWMvgsNgdGC5JXFBF51xdvBt",
+    "valueSat": 126907021,
+    "value": 1.26907021,
+    "doubleSpentTxID": null,
+    "isConfirmed": true,
+    "confirmations": 791,
+    "unconfirmedInput": false
+  }, {
+    "txid": "f3c028821b5a344a73a6b9986d85de245d4bbce43fea3b993c8e2aa2b09eb472",
+    "vout": 0,
+    "scriptSig": {
+      "asm": "0 30450221009d8d6244f69c3d7d057ef6daea8394506e7d270cb7c841f203787574e486450202205fbb72e59d761da571ac626612621190b3418e43797a253aafe8004839ebd5d501 3044022052e38422197628c3e686e56b936278c464d2dcac178f3a6d3e2d9fc61ea5e9fb02203785e5cb104f63106980af619063e87a5ee0006f8e3494269afa8668336ddd2401 522102a43450a93d377a8678600a9731ef99d7f3e0ab38f1073e73d7bfae47c6935a6521033881192aab063992ffbe7cc59755ec92e299deefed497c45321551fdec659ecc2103ce722d31bfddf3a1929d4f72fb4377e2b558c43b3dad3231d2e66d443867a92653ae",
+      "hex": "004830450221009d8d6244f69c3d7d057ef6daea8394506e7d270cb7c841f203787574e486450202205fbb72e59d761da571ac626612621190b3418e43797a253aafe8004839ebd5d501473044022052e38422197628c3e686e56b936278c464d2dcac178f3a6d3e2d9fc61ea5e9fb02203785e5cb104f63106980af619063e87a5ee0006f8e3494269afa8668336ddd24014c69522102a43450a93d377a8678600a9731ef99d7f3e0ab38f1073e73d7bfae47c6935a6521033881192aab063992ffbe7cc59755ec92e299deefed497c45321551fdec659ecc2103ce722d31bfddf3a1929d4f72fb4377e2b558c43b3dad3231d2e66d443867a92653ae"
+    },
+    "sequence": 4294967295,
+    "n": 1,
+    "addr": "3EmPDZTX55GCKZwy3zbRAuKAKhQejVbbAf",
+    "valueSat": 60000000000,
+    "value": 600,
+    "doubleSpentTxID": null,
+    "isConfirmed": false,
+    "confirmations": 0,
+    "unconfirmedInput": true
+  }],
+  "vout": [{
+    "value": "201.26897021",
+    "n": 0,
+    "scriptPubKey": {
+      "asm": "OP_HASH160 7e8e6f422c497f0f246b26c74a7271beebd3bff5 OP_EQUAL",
+      "hex": "a9147e8e6f422c497f0f246b26c74a7271beebd3bff587",
+      "reqSigs": 1,
+      "type": "scripthash",
+      "addresses": ["3DEBhF7X3qjkxNYRR1Wvj3m1THWG6SkMd5"]
+    },
+    "spentTxId": "ad05f436d9874a7e9dc1188732ff55d4b15b0e3e09aec8c4d8b4edc07deec5a6",
+    "spentIndex": 0,
+    "spentTs": 1436524164
+  }, {
+    "value": "400.00000000",
+    "n": 1,
+    "scriptPubKey": {
+      "asm": "OP_DUP OP_HASH160 7985c13db033c0bc56e6278c87ba1d00924ba601 OP_EQUALVERIFY OP_CHECKSIG",
+      "hex": "76a9147985c13db033c0bc56e6278c87ba1d00924ba60188ac",
+      "reqSigs": 1,
+      "type": "pubkeyhash",
+      "addresses": ["1C5YzfMKZsDwXM4XMnM4VKdDsUH2rqWP8d"]
+    }
+  }],
+  "valueOut": 601.26897021,
+  "size": 668,
+  "valueIn": 601.26907021,
+  "fees": 0.0001
+}];
+
+var addrForHistory2 = [
+  	{
+		"version" : "1.0.0",
+		"createdOn" : 1436400307,
+		"address" : "3EmPDZTX55GCKZwy3zbRAuKAKhQejVbbAf",
+		"isChange" : false,
+		"path" : "m/2147483647/0/56",
+		"publicKeys" : [
+			"xx",
+			"xx",
+			"xx",
+		],
+		"network" : "livenet"
+	},
+  	{
+		"version" : "1.0.0",
+		"createdOn" : 1436460066,
+		"address" : "3DEBhF7X3qjkxNYRR1Wvj3m1THWG6SkMd5",
+		"isChange" : true,
+		"path" : "m/2147483647/1/121",
+		"publicKeys" : [
+			"xx",
+			"xx",
+			"xx",
+		],
+		"network" : "livenet"
+	},
+
+  	{
+		"version" : "1.0.0",
+		"createdOn" : 1436459384,
+		"address" : "3LotYiK134bWMvgsNgdGC5JXFBF51xdvBt",
+		"isChange" : true,
+		"path" : "m/2147483647/1/120",
+		"publicKeys" : [
+			"xx",
+			"xx",
+			"xx",
+		],
+		"network" : "livenet"
+	},
+
+];
+
 
 module.exports.keyPair = keyPair;
 module.exports.message = message;
 module.exports.copayers = copayers;
 module.exports.history = history;
+module.exports.history2 = history2;
+module.exports.addrForHistory2 = addrForHistory2;
