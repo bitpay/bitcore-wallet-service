@@ -44,6 +44,14 @@ var config = {
       provider: 'insight',
       url: 'https://test-insight.bitpay.com:443',
     },
+    // livenet: {
+    //   provider: 'bitcorenode',
+    //   url: 'http://localhost:3000'
+    // },
+    // testnet: {
+    //   provider: 'bitcorenode',
+    //   url: 'http://localhost:3001'
+    // }
   },
   // To use email notifications uncomment this:
   // emailOpts: {
