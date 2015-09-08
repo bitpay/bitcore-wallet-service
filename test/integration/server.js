@@ -3173,7 +3173,7 @@ describe('Wallet service', function() {
     it('should mark tx as broadcasted if accepted but already in blockchain', function(done) {
       blockchainExplorer.broadcast = sinon.stub().callsArgWith(1, 'broadcast error');
       blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, null, {
-        txid: '999'
+        id: '999'
       });
       server.broadcastTx({
         txProposalId: txpid
