@@ -148,6 +148,7 @@ describe('Storage', function() {
             tx.status = 'rejected';
             tx.isPending().should.be.false;
           }
+          tx.txid = 'txid' + i;
           return tx;
         });
         async.each(proposals, function(tx, next) {
@@ -168,6 +169,17 @@ describe('Storage', function() {
         done();
       });
     });
+    it('should fetch tx by hash', function(done) {
+      storage.fetchTxByHash('txid0', function(err, tx) {
+        should.not.exist(err);
+        should.exist(tx);
+        tx.id.should.equal(proposals[0].id);
+        tx.walletId.should.equal(proposals[0].walletId);
+        tx.creatorName.should.equal('copayer 0');
+        done();
+      });
+    });
+ 
     it('should fetch all pending txs', function(done) {
       storage.fetchPendingTxs('123', function(err, txs) {
         should.not.exist(err);

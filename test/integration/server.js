@@ -170,8 +170,9 @@ helpers.stubUtxos = function(server, wallet, amounts, cb) {
   });
 };
 
-helpers.stubBroadcast = function(txid) {
-  blockchainExplorer.broadcast = sinon.stub().callsArgWith(1, null, txid);
+helpers.stubBroadcast = function(thirdPartyBroadcast) {
+  blockchainExplorer.broadcast = sinon.stub().callsArgWith(1, null, '112233');
+  blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, null, null);
 };
 
 helpers.stubHistory = function(txs) {
@@ -458,14 +459,14 @@ describe('Wallet service', function() {
       helpers.stubUtxos(server, wallet, [1, 1], function() {
         var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.8, 'some message', TestData.copayers[0].privKey_1H_0);
 
-        var txpId;
+        var txp;
         async.waterfall([
 
           function(next) {
             server.createTx(txOpts, next);
           },
-          function(txp, next) {
-            txpId = txp.id;
+          function(t, next) {
+            txp = t;
             async.eachSeries(_.range(2), function(i, next) {
               var copayer = TestData.copayers[i];
               helpers.getAuthServer(copayer.id, function(server) {
@@ -473,14 +474,17 @@ describe('Wallet service', function() {
                 server.signTx({
                   txProposalId: txp.id,
                   signatures: signatures,
-                }, next);
+                }, function(err, t) {
+                  txp = t;
+                  next();
+                });
               });
             }, next);
           },
           function(next) {
-            helpers.stubBroadcast('999');
+            helpers.stubBroadcast();
             server.broadcastTx({
-              txProposalId: txpId,
+              txProposalId: txp.id,
             }, next);
           },
         ], function(err) {
@@ -498,7 +502,7 @@ describe('Wallet service', function() {
             one.text.should.contain(wallet.name);
             one.text.should.contain('800,000');
             should.exist(one.html);
-            one.html.should.contain('https://insight.bitpay.com/tx/999');
+            one.html.should.contain('https://insight.bitpay.com/tx/' + txp.txid);
             server.storage.fetchUnsentEmails(function(err, unsent) {
               should.not.exist(err);
               unsent.should.be.empty;
@@ -2386,6 +2390,7 @@ describe('Wallet service', function() {
       });
 
       it('should sign a TX with multiple inputs, different paths, and return raw', function(done) {
+        blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, null, null);
         server.getPendingTxs({}, function(err, txs) {
           var tx = txs[0];
           tx.id.should.equal(txid);
@@ -2621,8 +2626,8 @@ describe('Wallet service', function() {
     });
   });
 
-  describe('#broadcastTx & #braodcastRawTx', function() {
-    var server, wallet, txpid;
+  describe('#broadcastTx & #broadcastRawTx', function() {
+    var server, wallet, txpid, txid;
     beforeEach(function(done) {
       helpers.createAndJoinWallet(1, 1, function(s, w) {
         server = s;
@@ -2641,6 +2646,7 @@ describe('Wallet service', function() {
               should.exist(txp);
               txp.isAccepted().should.be.true;
               txp.isBroadcasted().should.be.false;
+              txid = txp.txid;
               txpid = txp.id;
               done();
             });
@@ -2651,7 +2657,7 @@ describe('Wallet service', function() {
 
     it('should broadcast a tx', function(done) {
       var clock = sinon.useFakeTimers(1234000, 'Date');
-      helpers.stubBroadcast('999');
+      helpers.stubBroadcast();
       server.broadcastTx({
         txProposalId: txpid
       }, function(err) {
@@ -2661,7 +2667,7 @@ describe('Wallet service', function() {
         }, function(err, txp) {
           should.not.exist(err);
           should.not.exist(txp.raw);
-          txp.txid.should.equal('999');
+          txp.txid.should.equal(txid);
           txp.isBroadcasted().should.be.true;
           txp.broadcastedOn.should.equal(1234);
           clock.restore();
@@ -2671,19 +2677,19 @@ describe('Wallet service', function() {
     });
 
     it('should broadcast a raw tx', function(done) {
-      helpers.stubBroadcast('999');
+      helpers.stubBroadcast();
       server.broadcastRawTx({
         network: 'testnet',
         rawTx: 'raw tx',
       }, function(err, txid) {
         should.not.exist(err);
-        txid.should.equal('999');
+        should.exist(txid);
         done();
       });
     });
 
     it('should fail to brodcast a tx already marked as broadcasted', function(done) {
-      helpers.stubBroadcast('999');
+      helpers.stubBroadcast();
       server.broadcastTx({
         txProposalId: txpid
       }, function(err) {
@@ -2698,8 +2704,52 @@ describe('Wallet service', function() {
       });
     });
 
+    it('should auto process already broadcasted txs', function(done) {
+      helpers.stubBroadcast();
+      server.getPendingTxs({}, function(err, txs) {
+        should.not.exist(err);
+        txs.length.should.equal(1);
+        blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, null, {
+          txid: 999
+        });
+        server.getPendingTxs({}, function(err, txs) {
+          should.not.exist(err);
+          txs.length.should.equal(0);
+          done();
+        });
+      });
+    });
+
+    it('should process only broadcasted txs', function(done) {
+      helpers.stubBroadcast();
+      var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 9, TestData.copayers[0].privKey_1H_0, {
+        message: 'some message 2'
+      });
+      server.createTx(txOpts, function(err, txp) {
+        should.not.exist(err);
+        server.getPendingTxs({}, function(err, txs) {
+          should.not.exist(err);
+          txs.length.should.equal(2);
+          blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, null, {
+            txid: 999
+          });
+          server.getPendingTxs({}, function(err, txs) {
+            should.not.exist(err);
+            txs.length.should.equal(1);
+            txs[0].status.should.equal('pending');
+            should.not.exist(txs[0].txid);
+            done();
+          });
+        });
+      });
+    });
+
+
+
+
+
     it('should fail to brodcast a not yet accepted tx', function(done) {
-      helpers.stubBroadcast('999');
+      helpers.stubBroadcast();
       var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 9, 'some other message', TestData.copayers[0].privKey_1H_0);
       server.createTx(txOpts, function(err, txp) {
         should.not.exist(err);
@@ -2726,7 +2776,7 @@ describe('Wallet service', function() {
           txProposalId: txpid
         }, function(err, txp) {
           should.not.exist(err);
-          should.not.exist(txp.txid);
+          should.exist(txp.txid);
           txp.isBroadcasted().should.be.false;
           should.not.exist(txp.broadcastedOn);
           txp.isAccepted().should.be.true;
@@ -2749,7 +2799,6 @@ describe('Wallet service', function() {
         }, function(err, txp) {
           should.not.exist(err);
           should.exist(txp.txid);
-          txp.txid.should.equal('999');
           txp.isBroadcasted().should.be.true;
           should.exist(txp.broadcastedOn);
           done();
@@ -2769,7 +2818,7 @@ describe('Wallet service', function() {
           txProposalId: txpid
         }, function(err, txp) {
           should.not.exist(err);
-          should.not.exist(txp.txid);
+          should.exist(txp.txid);
           txp.isBroadcasted().should.be.false;
           should.not.exist(txp.broadcastedOn);
           txp.isAccepted().should.be.true;
@@ -2786,7 +2835,7 @@ describe('Wallet service', function() {
         server = s;
         wallet = w;
         helpers.stubUtxos(server, wallet, _.range(1, 9), function() {
-          helpers.stubBroadcast('999');
+          helpers.stubBroadcast();
           done();
         });
       });
@@ -2881,7 +2930,7 @@ describe('Wallet service', function() {
             txp.isPending().should.be.true;
             txp.isAccepted().should.be.true;
             txp.isBroadcasted().should.be.false;
-            should.not.exist(txp.txid);
+            should.exist(txp.txid);
             txp.actions.length.should.equal(2);
             server.getNotifications({}, function(err, notifications) {
               should.not.exist(err);
@@ -3249,7 +3298,7 @@ describe('Wallet service', function() {
           signatures: signatures,
         }, function(err) {
           should.not.exist(err);
-          helpers.stubBroadcast('1122334455');
+          helpers.stubBroadcast();
           server.broadcastTx({
             txProposalId: tx.id
           }, function(err, txp) {
@@ -3261,6 +3310,38 @@ describe('Wallet service', function() {
               should.not.exist(err);
               var types = _.pluck(notifications, 'type');
               types.should.deep.equal(['NewOutgoingTx', 'TxProposalFinallyAccepted', 'TxProposalAcceptedBy']);
+              done();
+            });
+          });
+        });
+      });
+    });
+
+
+    it('should notify sign, acceptance, and broadcast, and emit (with 3rd party broadcast', function(done) {
+      server.getPendingTxs({}, function(err, txs) {
+        var tx = txs[2];
+        var signatures = helpers.clientSign(tx, TestData.copayers[0].xPrivKey);
+        server.signTx({
+          txProposalId: tx.id,
+          signatures: signatures,
+        }, function(err) {
+          should.not.exist(err);
+          blockchainExplorer.broadcast = sinon.stub().callsArgWith(1, 'err');
+          blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, null, {
+            txid: 11
+          });
+          server.broadcastTx({
+            txProposalId: tx.id
+          }, function(err, txp) {
+            should.not.exist(err);
+            server.getNotifications({
+              limit: 3,
+              reverse: true,
+            }, function(err, notifications) {
+              should.not.exist(err);
+              var types = _.pluck(notifications, 'type');
+              types.should.deep.equal(['NewOutgoingTxByThirdParty', 'TxProposalFinallyAccepted', 'TxProposalAcceptedBy']);
               done();
             });
           });
@@ -3743,13 +3824,13 @@ describe('Wallet service', function() {
           }, function(err, tx) {
             should.not.exist(err);
 
-            helpers.stubBroadcast('1122334455');
+            helpers.stubBroadcast();
             server.broadcastTx({
               txProposalId: tx.id
             }, function(err, txp) {
               should.not.exist(err);
               var txs = [{
-                txid: '1122334455',
+                txid: txp.txid,
                 confirmations: 1,
                 fees: 5460,
                 time: 1,
