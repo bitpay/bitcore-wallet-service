@@ -2722,9 +2722,7 @@ describe('Wallet service', function() {
 
     it('should process only broadcasted txs', function(done) {
       helpers.stubBroadcast();
-      var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 9, TestData.copayers[0].privKey_1H_0, {
-        message: 'some message 2'
-      });
+      var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 9, 'some message 2', TestData.copayers[0].privKey_1H_0);
       server.createTx(txOpts, function(err, txp) {
         should.not.exist(err);
         server.getPendingTxs({}, function(err, txs) {
