@@ -6,17 +6,19 @@ var io = require('socket.io');
 var https = require('https');
 var http = require('http');
 var async = require('async');
+var Locker = require('locker-server');
+var child_process = require('child_process');
+var spawn = child_process.spawn;
+var EventEmitter = require('events').EventEmitter;
 var path = require('path');
 var bitcore = require('bitcore');
+var _ = bitcore.deps._;
 var Networks = bitcore.Networks;
-var Locker = require('locker-server');
 var BlockchainMonitor = require('../lib/blockchainmonitor');
 var EmailService = require('../lib/emailservice');
 var ExpressApp = require('../lib/expressapp');
 var WsApp = require('../lib/wsapp');
-var child_process = require('child_process');
-var spawn = child_process.spawn;
-var EventEmitter = require('events').EventEmitter;
+var WalletServer = require('./server');
 var baseConfig = require('../config');
 
 /**
@@ -34,6 +36,10 @@ var Service = function(options) {
   this.node = options.node;
   this.https = options.https || this.node.https;
   this.httpsOptions = options.httpsOptions || this.node.httpsOptions;
+  // The default configuration will be to run as a single process
+  // in the case that we are running in multiple processes, the service will expect
+  // a message-broker and locker server to be available.
+  this.singleProcess = _.isUndefined(options.singleProcess) ? true : options.singleProcess;
   this.bwsPort = options.bwsPort || baseConfig.port;
   this.messageBrokerPort = options.messageBrokerPort || 3380;
   if (baseConfig.lockOpts) {
@@ -45,31 +51,6 @@ var Service = function(options) {
 util.inherits(Service, EventEmitter);
 
 Service.dependencies = ['insight-api'];
-
-/**
- * This method will read `key` and `cert` files from disk based on `httpsOptions` and
- * return `serverOpts` with the read files.
- * @returns {Object}
- */
-Service.prototype._readHttpsOptions = function() {
-  if(!this.httpsOptions || !this.httpsOptions.key || !this.httpsOptions.cert) {
-    throw new Error('Missing https options');
-  }
-
-  var serverOpts = {};
-  serverOpts.key = fs.readFileSync(this.httpsOptions.key);
-  serverOpts.cert = fs.readFileSync(this.httpsOptions.cert);
-
-  // This sets the intermediate CA certs only if they have all been designated in the config.js
-  if (this.httpsOptions.CAinter1 && this.httpsOptions.CAinter2 && this.httpsOptions.CAroot) {
-    serverOpts.ca = [
-      fs.readFileSync(this.httpsOptions.CAinter1),
-      fs.readFileSync(this.httpsOptions.CAinter2),
-      fs.readFileSync(this.httpsOptions.CAroot)
-    ];
-  }
-  return serverOpts;
-};
 
 /**
  * Will get the configuration with settings for the locally
@@ -105,33 +86,39 @@ Service.prototype._getConfiguration = function() {
 };
 
 /**
- * Will start the HTTP web server and socket.io for the wallet service.
+ * Will start the wallet service in a cluster, it's necessary that we spawn
+ * into a new process, so that this process can be forked into separate child
+ * processes without forking the main process.
  */
-Service.prototype._startWalletService = function(config, next) {
-  var self = this;
-  var expressApp = new ExpressApp();
-  var wsApp = new WsApp();
+Service.prototype._startWalletServiceCluster = function(config, next) {
+  var configuration = _.clone(config);
+  configuration.port = this.bwsPort;
+  var args = [
+    path.resolve(__dirname, './server.js'),
+    JSON.stringify(config)
+  ];
 
-  if (self.https) {
-    var serverOpts = self._readHttpsOptions();
-    self.server = https.createServer(serverOpts, expressApp.app);
-  } else {
-    self.server = http.Server(expressApp.app);
-  }
+  var options = {
+    cwd: process.cwd(),
+    env: process.env
+  };
 
-  async.parallel([
-    function(done) {
-      expressApp.start(config, done);
-    },
-    function(done) {
-      wsApp.start(self.server, config, done);
-    },
-  ], function(err) {
-    if (err) {
-      return next(err);
-    }
-    self.server.listen(self.bwsPort, next);
+  var bws = spawn('node', args, options);
+
+  bws.stdout.on('data', function (data) {
+    process.stdout.write(data);
   });
+
+  bws.stderr.on('data', function (data) {
+    process.stderr.write(data);
+  });
+
+  bws.on('close', function (code, signal) {
+    if (code && code !== 0) {
+      throw new Error('BWS closed with exit code:' + code);
+    }
+  });
+  setImmediate(next);
 };
 
 /**
@@ -147,17 +134,21 @@ Service.prototype.start = function(done) {
     return done(err);
   }
 
-  // Locker Server
-  var locker = new Locker();
-  locker.listen(self.lockerPort);
+  // When multiple nodes are started with BWS these servers are expected
+  // to be run in a different process.
+  if (self.singleProcess) {
+    // Locker Server
+    var locker = new Locker();
+    locker.listen(self.lockerPort);
 
-  // Message Broker
-  var messageServer = io(self.messageBrokerPort);
-  messageServer.on('connection', function(s) {
-    s.on('msg', function(d) {
-      messageServer.emit('msg', d);
+    // Message Broker
+    var messageServer = io(self.messageBrokerPort);
+    messageServer.on('connection', function(s) {
+      s.on('msg', function(d) {
+        messageServer.emit('msg', d);
+      });
     });
-  });
+  }
 
   async.series([
     function(next) {
@@ -175,7 +166,16 @@ Service.prototype.start = function(done) {
       }
     },
     function(next) {
-      self._startWalletService(config, next);
+      if (self.singleProcess) {
+        WalletServer.start(config, function(err, server) {
+          if (err) {
+            return next(err);
+          }
+          server.listen(self.bwsPort, next);
+        });
+      } else {
+        self._startWalletServiceCluster(config, next);
+      }
     }
   ], done);
 
