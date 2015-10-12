@@ -95,7 +95,7 @@ Service.prototype._startWalletServiceCluster = function(config, next) {
   configuration.port = this.bwsPort;
   var args = [
     path.resolve(__dirname, './server.js'),
-    JSON.stringify(config)
+    JSON.stringify(configuration)
   ];
 
   var options = {

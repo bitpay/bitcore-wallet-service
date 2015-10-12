@@ -97,7 +97,6 @@ function startCluster(config) {
       }
     });
   });
-
   server.listen(config.port, function(err) {
     if (err) {
       console.log('ERROR: ', err);
