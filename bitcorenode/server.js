@@ -24,7 +24,7 @@ function start(config, next) {
   var server;
 
   if (config.https) {
-    var serverOpts = readHttpsOptions(config);
+    var serverOpts = utils.readHttpsOptions(config);
     server = https.createServer(serverOpts, expressApp.app);
   } else {
     server = http.Server(expressApp.app);
@@ -91,7 +91,7 @@ function startCluster(config) {
   var serverModule = config.https ? https : http;
 
   var server = sticky(clusterInstances, function() {
-    return start(config, function(err) {
+    return utils.start(config, function(err) {
       if (err) {
         console.error('Could not start BWS instance', err);
       }
@@ -113,7 +113,7 @@ if (require.main === module) {
   startCluster(config);
 }
 
-module.exports = {
+var utils = module.exports = {
   startCluster: startCluster,
   readHttpsOptions: readHttpsOptions,
   start: start
