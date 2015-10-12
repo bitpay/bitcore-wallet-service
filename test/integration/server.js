@@ -329,7 +329,9 @@ helpers.createAddresses = function(server, wallet, main, change, cb) {
 
 var storage, blockchainExplorer;
 
-var useMongoDb = !!process.env.USE_MONGO_DB;
+// Features of mongodb are exclusively used for coordinating notifications
+// and tests should always run against mongodb
+var useMongoDb = true;
 
 function initStorage(cb) {
   function getDb(cb) {
@@ -3883,9 +3885,14 @@ describe('Wallet service', function() {
         server = s;
         wallet = w;
         helpers.stubUtxos(server, wallet, _.range(4), function() {
-          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.01, TestData.copayers[0].privKey_1H_0);
+          function txOpts(i) {
+            return helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.01, TestData.copayers[0].privKey_1H_0);
+          }
           async.eachSeries(_.range(3), function(i, next) {
-            server.createTx(txOpts, function(err, tx) {
+            server.createTx(txOpts(i), function(err, tx) {
+              if (err) {
+                throw err;
+              }
               should.not.exist(err);
               next();
             });
