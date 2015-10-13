@@ -81,10 +81,10 @@ utils.readHttpsOptions = function readHttpsOptions(config) {
  * to best utilize all of the available CPU.
  */
 utils.startCluster = function startCluster(config) {
-  if (!config.lockOpts.lockerServer) {
+  if (!config.lockOpts || !config.lockOpts.lockerServer) {
     throw 'When running in cluster mode, locker server need to be configured';
   }
-  if (!config.messageBrokerOpts.messageBrokerServer) {
+  if (!config.messageBrokerOpts || !config.messageBrokerOpts.messageBrokerServer) {
     throw 'When running in cluster mode, message broker server need to be configured';
   }
 

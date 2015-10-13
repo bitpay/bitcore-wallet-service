@@ -36,6 +36,65 @@ describe('Server Utilities', function() {
       serverOptions.ca[2].should.equal('CAroot');
     });
   });
+  describe('#startCluster', function() {
+    it('will throw error with missing options', function() {
+      var server = proxyquire('../bitcorenode/server.js', {});
+      (function() {
+        server.startCluster({});
+      }).should.throw('When running in cluster mode, locker server');
+      (function() {
+        server.startCluster({
+          lockOpts: {}
+        });
+      }).should.throw('When running in cluster mode, locker server');
+      (function() {
+        server.startCluster({
+          lockOpts: {
+            lockerServer: {}
+          }
+        });
+      }).should.throw('When running in cluster mode, message broker');
+      (function() {
+        server.startCluster({
+          lockOpts: {
+            lockerServer: {}
+          },
+          messageBrokerOpts: {}
+        });
+      }).should.throw('When running in cluster mode, message broker');
+    });
+    it('should start several instances', function(done) {
+      var httpServer = {
+        listen: sinon.stub()
+      };
+      var server = proxyquire('../bitcorenode/server.js', {
+        'os': {
+          cpus: sinon.stub().returns({length: 8})
+        },
+        'sticky-session': function(instances) {
+          instances.should.equal(8);
+          return httpServer;
+        }
+      });
+      server.start = sinon.stub().callsArg(1);
+      server.startCluster({
+        lockOpts: {
+          lockerServer: {
+            host: 'localhost',
+            port: 3231
+          }
+        },
+        messageBrokerOpts: {
+          messageBrokerServer: 'http://localhost:3380'
+        },
+        port: 3232
+      });
+      httpServer.listen.callCount.should.equal(1);
+      httpServer.listen.args[0][0].should.equal(3232);
+      done();
+    });
+
+  });
   describe('#start', function() {
     it('will start express and web socket servers', function(done) {
       function TestExpressApp() {}
