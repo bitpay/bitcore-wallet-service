@@ -10,6 +10,8 @@ var cluster = require('cluster');
 var ExpressApp = require('../lib/expressapp');
 var WsApp = require('../lib/wsapp');
 
+var utils = {};
+
 /**
  * Will start the HTTP web server and socket.io for the wallet service,
  * it will not start listing on a port, and will give an http server
@@ -17,7 +19,7 @@ var WsApp = require('../lib/wsapp');
  * @param {Object} config
  * @param {Function} next
  */
-function start(config, next) {
+utils.start = function start(config, next) {
   var expressApp = new ExpressApp();
   var wsApp = new WsApp();
 
@@ -45,14 +47,14 @@ function start(config, next) {
   });
 
   return server;
-}
+};
 
 /**
  * This method will read `key` and `cert` files from disk based on `httpsOptions` and
  * return `serverOpts` with the read files.
  * @returns {Object}
  */
-function readHttpsOptions(config) {
+utils.readHttpsOptions = function readHttpsOptions(config) {
   if(!config.httpsOptions || !config.httpsOptions.key || !config.httpsOptions.cert) {
     throw new Error('Missing https options');
   }
@@ -72,13 +74,13 @@ function readHttpsOptions(config) {
     ];
   }
   return serverOpts;
-}
+};
 
 /**
  * This will start a cluster of web services listening on the same port,
  * to best utilize all of the available CPU.
  */
-function startCluster(config) {
+utils.startCluster = function startCluster(config) {
   if (!config.lockOpts.lockerServer) {
     throw 'When running in cluster mode, locker server need to be configured';
   }
@@ -103,18 +105,14 @@ function startCluster(config) {
     }
     console.info('Bitcore Wallet Service running on port ' + config.port);
   });
-}
+};
 
 if (require.main === module) {
   if (!process.argv[2]) {
     throw new Error('Expected configuration not available as an argument.');
   }
   var config = JSON.parse(process.argv[2]);
-  startCluster(config);
+  utils.startCluster(config);
 }
 
-var utils = module.exports = {
-  startCluster: startCluster,
-  readHttpsOptions: readHttpsOptions,
-  start: start
-};
+module.exports = utils;
