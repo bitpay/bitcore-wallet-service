@@ -21,31 +21,23 @@ var WsApp = require('../lib/wsapp');
 var WalletServer = require('./server');
 var baseConfig = require('../config');
 
+var BROKER_DEFAULT_PORT = 3380;
+
 /**
  * A Bitcore Node Service module
  * @param {Object} options
  * @param {Node} options.node - A reference to the Bitcore Node instance
--* @param {Boolean} options.https - Enable https for this module, defaults to node settings.
- * @param {Number} options.bwsPort - Port for Bitcore Wallet Service API
- * @param {Number} options.messageBrokerPort - Port for BWS message broker
- * @param {Number} options.lockerPort - Port for BWS locker port
+ * @param {Boolean} options.https - Enable https for this module, defaults to node settings.
+ * @param {Number} options.cluster - Enable clustering
+ * @param {Number} options.port - Port for Bitcore Wallet Service API
+ * @param {Number} options.lockerOpts - Locker server options
+ * @param {Number} options.messageBrokerOpts - Message server options
  */
 var Service = function(options) {
   EventEmitter.call(this);
 
   this.node = options.node;
-  this.https = options.https || this.node.https;
-  this.httpsOptions = options.httpsOptions || this.node.httpsOptions;
-  // The default configuration will be to run as a single process
-  // in the case that we are running in multiple processes, the service will expect
-  // a message-broker and locker server to be available.
-  this.singleProcess = _.isUndefined(options.singleProcess) ? true : options.singleProcess;
-  this.bwsPort = options.bwsPort || baseConfig.port;
-  this.messageBrokerPort = options.messageBrokerPort || 3380;
-  if (baseConfig.lockOpts) {
-    this.lockerPort = baseConfig.lockOpts.lockerServer.port;
-  }
-  this.lockerPort = options.lockerPort || this.lockerPort;
+  this.options = options;
 };
 
 util.inherits(Service, EventEmitter);
@@ -60,6 +52,23 @@ Service.dependencies = ['insight-api'];
 Service.prototype._getConfiguration = function() {
   var self = this;
 
+  var config = _.clone(baseConfig);
+
+  config.https = this.options.https || this.node.https;
+  config.httpsOptions = this.options.httpsOptions || this.node.httpsOptions;
+  // The default configuration will be to run as a single process
+  // in the case that we are running in multiple processes, the service will expect
+  // a message-broker and locker server to be available.
+  config.cluster = this.options.cluster || false;
+  config.port = this.options.port || baseConfig.port;
+
+  if (this.options.lockerOpts) {
+    config.lockOpts = this.options.lockerPort;
+  }
+  if (this.options.messageBrokerOpts) {
+    config.messageBrokerOpts = this.options.messageBrokerOpts;
+  }
+
   var providerOptions = {
     provider: 'insight',
     url: 'http://localhost:' + self.node.port,
@@ -70,18 +79,18 @@ Service.prototype._getConfiguration = function() {
   // the configuration options to communicate via the local running
   // instance of the insight-api service.
   if (self.node.network === Networks.livenet) {
-    baseConfig.blockchainExplorerOpts = {
+    config.blockchainExplorerOpts = {
       livenet: providerOptions
     };
   } else if (self.node.network === Networks.testnet) {
-    baseConfig.blockchainExplorerOpts = {
+    config.blockchainExplorerOpts = {
       testnet: providerOptions
     };
   } else {
     throw new Error('Unknown network');
   }
 
-  return baseConfig;
+  return config;
 
 };
 
@@ -91,11 +100,9 @@ Service.prototype._getConfiguration = function() {
  * processes without forking the main process.
  */
 Service.prototype._startWalletServiceCluster = function(config, next) {
-  var configuration = _.clone(config);
-  configuration.port = this.bwsPort;
   var args = [
     path.resolve(__dirname, './server.js'),
-    JSON.stringify(configuration)
+    JSON.stringify(config)
   ];
 
   var options = {
@@ -121,6 +128,8 @@ Service.prototype._startWalletServiceCluster = function(config, next) {
   setImmediate(next);
 };
 
+
+
 /**
  * Called by the node to start the service
  */
@@ -136,13 +145,13 @@ Service.prototype.start = function(done) {
 
   // When multiple nodes are started with BWS these servers are expected
   // to be run in a different process.
-  if (self.singleProcess) {
+  if (!config.cluster) {
     // Locker Server
     var locker = new Locker();
-    locker.listen(self.lockerPort);
+    locker.listen(config.lockerOpts.lockerServer.port);
 
     // Message Broker
-    var messageServer = io(self.messageBrokerPort);
+    var messageServer = io(config.messageBrokerOpts.messageBrokerServer.port || BROKER_DEFAULT_PORT);
     messageServer.on('connection', function(s) {
       s.on('msg', function(d) {
         messageServer.emit('msg', d);
@@ -166,12 +175,12 @@ Service.prototype.start = function(done) {
       }
     },
     function(next) {
-      if (self.singleProcess) {
+      if (!config.cluster) {
         WalletServer.start(config, function(err, server) {
           if (err) {
             return next(err);
           }
-          server.listen(self.bwsPort, next);
+          server.listen(config.port, next);
         });
       } else {
         self._startWalletServiceCluster(config, next);

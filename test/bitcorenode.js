@@ -229,47 +229,7 @@ describe('Bitcore Node Service', function() {
       };
       var service = new Service(options);
       service.node.should.equal(node);
-      service.https.should.equal(true);
-      service.httpsOptions.should.deep.equal({
-        key: 'key',
-        cert: 'cert'
-      });
-      service.bwsPort.should.equal(3232);
-      service.messageBrokerPort.should.equal(3380);
-      service.lockerPort.should.equal(3231);
-    });
-    it('direct https options', function() {
-      var node = {};
-      var options = {
-        node: node,
-        https: true,
-        httpsOptions: {
-          key: 'key',
-          cert: 'cert'
-        }
-      };
-      var service = new Service(options);
-      service.https.should.equal(true);
-      service.httpsOptions.should.deep.equal({
-        key: 'key',
-        cert: 'cert'
-      });
-      service.bwsPort.should.equal(3232);
-      service.messageBrokerPort.should.equal(3380);
-      service.lockerPort.should.equal(3231);
-    });
-    it('can set custom ports', function() {
-      var node = {};
-      var options = {
-        node: node,
-        bwsPort: 1000,
-        messageBrokerPort: 1001,
-        lockerPort: 1002
-      };
-      var service = new Service(options);
-      service.bwsPort.should.equal(1000);
-      service.messageBrokerPort.should.equal(1001);
-      service.lockerPort.should.equal(1002);
+      service.options.should.equal(options);
     });
   });
   describe('#_getConfiguration', function() {
@@ -349,7 +309,9 @@ describe('Bitcore Node Service', function() {
         node: {}
       };
       var service = new TestService(options);
-      var config = {};
+      var config = {
+        cluster: true
+      };
       service._getConfiguration = sinon.stub().returns(config);
       service._startWalletService = sinon.stub().callsArg(1);
       service.start(function(err) {
@@ -374,11 +336,27 @@ describe('Bitcore Node Service', function() {
         'locker-server': TestLocker,
       });
       var options = {
-        node: {}
+        node: {},
       };
       var service = new TestService(options);
       service._getConfiguration = sinon.stub().returns({
-        emailOpts: {}
+        emailOpts: {},
+        lockerOpts: {
+          lockerServer: {
+            port: 3231
+          }
+        },
+        lockOpts: {
+          lockerServer: {
+            host: 'localhost',
+            port: 3231,
+          }
+        },
+        messageBrokerOpts: {
+          messageBrokerServer: {
+            url: 'http://localhost:3380'
+          }
+        }
       });
       var config = {};
       service._startWalletService = sinon.stub().callsArg(1);
