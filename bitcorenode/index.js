@@ -65,6 +65,7 @@ Service.prototype._getConfiguration = function() {
   if (this.options.lockerOpts) {
     config.lockOpts = this.options.lockerPort;
   }
+
   if (this.options.messageBrokerOpts) {
     config.messageBrokerOpts = this.options.messageBrokerOpts;
   }
@@ -148,7 +149,7 @@ Service.prototype.start = function(done) {
   if (!config.cluster) {
     // Locker Server
     var locker = new Locker();
-    locker.listen(config.lockerOpts.lockerServer.port);
+    locker.listen(config.lockOpts.lockerServer.port);
 
     // Message Broker
     var messageServer = io(config.messageBrokerOpts.messageBrokerServer.port || BROKER_DEFAULT_PORT);
