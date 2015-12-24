@@ -10,6 +10,7 @@
     "wallet",
     "bitcore"
   ],
+  "license" : "MIT",
   "repository": {
     "url": "git@github.com:bitpay/bitcore-wallet-service.git",
     "type": "git"
@@ -26,6 +27,7 @@
     "express": "^4.10.0",
     "inherits": "^2.0.1",
     "json-stable-stringify": "^1.0.0",
+    "kerberos": "~0.0.17",
     "locker": "^0.1.0",
     "locker-server": "^0.1.3",
     "lodash": "^3.10.1",
