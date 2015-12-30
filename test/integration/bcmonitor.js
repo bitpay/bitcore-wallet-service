@@ -87,4 +87,48 @@ describe('Blockchain monitor', function() {
       }, 100);
     });
   });
+
+  it.only('should not notify copayers of incoming RBF txs until confirmed', function(done) {
+    server.createAddress({}, function(err, address) {
+      should.not.exist(err);
+
+      var incoming = {
+        txid: '123',
+        vout: [{}],
+        isRBF: true,
+      };
+      incoming.vout[0][address.address] = 1500;
+      socket.handlers['tx'](incoming);
+
+      setTimeout(function() {
+        server.getNotifications({}, function(err, notifications) {
+          should.not.exist(err);
+          var notification = _.find(notifications, {
+            type: 'NewIncomingTx'
+          });
+          should.not.exist(notification);
+
+          blockchainExplorer.getTransaction = sinon.stub().yields(null, {
+            confirmations: 1
+          });
+          socket.handlers['block']('dummy-hash');
+
+          setTimeout(function() {
+            server.getNotifications({}, function(err, notifications) {
+              should.not.exist(err);
+              var notification = _.find(notifications, {
+                type: 'NewIncomingTx'
+              });
+              should.exist(notification);
+              notification.walletId.should.equal(wallet.id);
+              notification.data.txid.should.equal('123');
+              notification.data.address.should.equal(address.address);
+              notification.data.amount.should.equal(1500);
+              done();
+            });
+          }, 100);
+        });
+      }, 100);
+    });
+  });
 });
