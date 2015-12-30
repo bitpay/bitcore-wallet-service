@@ -88,7 +88,7 @@ describe('Blockchain monitor', function() {
     });
   });
 
-  it.only('should not notify copayers of incoming RBF txs until confirmed', function(done) {
+  it('should not notify copayers of incoming RBF txs until confirmed', function(done) {
     server.createAddress({}, function(err, address) {
       should.not.exist(err);
 
@@ -98,6 +98,11 @@ describe('Blockchain monitor', function() {
         isRBF: true,
       };
       incoming.vout[0][address.address] = 1500;
+
+      blockchainExplorer.getTransaction = sinon.stub().yields(null, {
+        confirmations: 0
+      });
+
       socket.handlers['tx'](incoming);
 
       setTimeout(function() {
