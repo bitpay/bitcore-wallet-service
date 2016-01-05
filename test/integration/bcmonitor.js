@@ -136,4 +136,55 @@ describe('Blockchain monitor', function() {
       }, 100);
     });
   });
+
+  it.only('should remove enqueued unconfirmed RBF txs older than 48 hours', function(done) {
+    var clock = sinon.useFakeTimers(Date.now(), 'Date');
+
+    server.createAddress({}, function(err, address) {
+      should.not.exist(err);
+
+      var incoming = {
+        txid: '123',
+        vout: [{}],
+        isRBF: true,
+      };
+      incoming.vout[0][address.address] = 1500;
+
+      blockchainExplorer.getTransaction = sinon.stub().yields(null, {
+        confirmations: 0
+      });
+
+      socket.handlers['tx'](incoming);
+
+      setTimeout(function() {
+        server.getNotifications({}, function(err, notifications) {
+          should.not.exist(err);
+          var notification = _.find(notifications, {
+            type: 'NewIncomingTx'
+          });
+          should.not.exist(notification);
+
+          clock.tick(48 * 3600 * 1000 + 1);
+
+          blockchainExplorer.getTransaction = sinon.stub().yields(null, {
+            confirmations: 1
+          });
+          socket.handlers['block']('dummy-hash');
+
+          setTimeout(function() {
+            server.getNotifications({}, function(err, notifications) {
+              should.not.exist(err);
+              var notification = _.find(notifications, {
+                type: 'NewIncomingTx'
+              });
+              should.not.exist(notification);
+
+              clock.restore();
+              done();
+            });
+          }, 100);
+        });
+      }, 100);
+    });
+  });
 });
