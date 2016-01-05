@@ -137,7 +137,7 @@ describe('Blockchain monitor', function() {
     });
   });
 
-  it.only('should remove enqueued unconfirmed RBF txs older than 48 hours', function(done) {
+  it('should remove enqueued unconfirmed RBF txs older than 48 hours', function(done) {
     var clock = sinon.useFakeTimers(Date.now(), 'Date');
 
     server.createAddress({}, function(err, address) {
