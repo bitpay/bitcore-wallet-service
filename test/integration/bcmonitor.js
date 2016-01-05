@@ -24,7 +24,7 @@ socket.on = function(eventName, handler) {
   this.handlers[eventName] = handler;
 };
 
-describe.only('Blockchain monitor', function() {
+describe('Blockchain monitor', function() {
   var server, wallet;
 
   before(function(done) {
