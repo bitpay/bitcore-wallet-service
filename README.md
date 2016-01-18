@@ -17,7 +17,7 @@ See [Bitcore-wallet-client] (https://github.com/bitpay/bitcore-wallet-client) fo
 
 BWS have a extensive test suite but have not been tested on production environments yet and have been recently released, so it it is still should be considered  BETA software.  
 
-More about BWS at http://blog.bitpay.com/2015/03/05/bitcore-wallet.html
+More about BWS at https://blog.bitpay.com/announcing-the-bitcore-wallet-suite/
 
 # Install
 ```
@@ -143,7 +143,7 @@ Returns:
 `/v1/addresses/`: Request a new main address from wallet
 
 Returns:
- * Address object: (https://github.com/bitpay/bitcore-wallet-service/blob/master/lib/model/adddress.js)). Note that `path` is returned so client can derive the address independently and check server's response.
+ * Address object: (https://github.com/bitpay/bitcore-wallet-service/blob/master/lib/model/address.js)). Note that `path` is returned so client can derive the address independently and check server's response.
 
 `/v1/txproposals/:id/signatures/`: Sign a transaction proposal
 

@@ -26,9 +26,11 @@ var TestData = require('../testdata');
 
 var storage, blockchainExplorer;
 
+var useMongoDb = !!process.env.USE_MONGO_DB;
+
 var helpers = {};
 
-var useMongoDb = !!process.env.USE_MONGO_DB;
+helpers.CLIENT_VERSION = 'bwc-2.0.0';
 
 helpers.before = function(cb) {
   function getDb(cb) {
@@ -58,7 +60,8 @@ helpers.beforeEach = function(cb) {
     blockchainExplorer = sinon.stub();
     var opts = {
       storage: storage,
-      blockchainExplorer: blockchainExplorer
+      blockchainExplorer: blockchainExplorer,
+      request: sinon.stub()
     };
     WalletService.initialize(opts, function() {
       return cb(opts);
@@ -96,10 +99,10 @@ helpers.getAuthServer = function(copayerId, cb) {
     copayerId: copayerId,
     message: 'dummy',
     signature: 'dummy',
-    clientVersion: 'bwc-0.1.0',
+    clientVersion: helpers.CLIENT_VERSION,
   }, function(err, server) {
     verifyStub.restore();
-    if (err || !server) throw new Error('Could not login as copayerId ' + copayerId);
+    if (err || !server) throw new Error('Could not login as copayerId ' + copayerId + ' err: ' + err);
     return cb(server);
   });
 };
@@ -209,52 +212,77 @@ helpers.toSatoshi = function(btc) {
   }
 };
 
-helpers.stubUtxos = function(server, wallet, amounts, cb) {
-  async.mapSeries(_.range(0, amounts.length > 2 ? 2 : 1), function(i, next) {
-    server.createAddress({}, next);
-  }, function(err, addresses) {
-    should.not.exist(err);
-    addresses.should.not.be.empty;
-    var utxos = _.compact(_.map([].concat(amounts), function(amount, i) {
-      var confirmations;
-      if (_.isString(amount) && _.startsWith(amount, 'u')) {
-        amount = parseFloat(amount.substring(1));
-        confirmations = 0;
+helpers.stubUtxos = function(server, wallet, amounts, opts, cb) {
+  if (_.isFunction(opts)) {
+    cb = opts;
+    opts = {};
+  }
+  opts = opts || {};
+
+  if (!helpers._utxos) helpers._utxos = {};
+
+  async.waterfall([
+
+    function(next) {
+      if (opts.addresses) return next(null, [].concat(opts.addresses));
+      async.mapSeries(_.range(0, amounts.length > 2 ? 2 : 1), function(i, next) {
+        server.createAddress({}, next);
+      }, next);
+    },
+    function(addresses, next) {
+      addresses.should.not.be.empty;
+
+      var utxos = _.compact(_.map([].concat(amounts), function(amount, i) {
+        var confirmations;
+        if (_.isString(amount) && _.startsWith(amount, 'u')) {
+          amount = parseFloat(amount.substring(1));
+          confirmations = 0;
+        } else {
+          confirmations = Math.floor(Math.random() * 100 + 1);
+        }
+        if (amount <= 0) return null;
+
+        var address = addresses[i % addresses.length];
+
+        var scriptPubKey;
+        switch (wallet.addressType) {
+          case Constants.SCRIPT_TYPES.P2SH:
+            scriptPubKey = Bitcore.Script.buildMultisigOut(address.publicKeys, wallet.m).toScriptHashOut();
+            break;
+          case Constants.SCRIPT_TYPES.P2PKH:
+            scriptPubKey = Bitcore.Script.buildPublicKeyHashOut(address.address);
+            break;
+        }
+        should.exist(scriptPubKey);
+
+        return {
+          txid: helpers.randomTXID(),
+          vout: Math.floor(Math.random() * 10 + 1),
+          satoshis: helpers.toSatoshi(amount),
+          scriptPubKey: scriptPubKey.toBuffer().toString('hex'),
+          address: address.address,
+          confirmations: confirmations
+        };
+      }));
+
+      if (opts.keepUtxos) {
+        helpers._utxos = helpers._utxos.concat(utxos);
       } else {
-        confirmations = Math.floor(Math.random() * 100 + 1);
+        helpers._utxos = utxos;
       }
-      if (amount <= 0) return null;
 
-      var address = addresses[i % addresses.length];
-
-      var scriptPubKey;
-      switch (wallet.addressType) {
-        case Constants.SCRIPT_TYPES.P2SH:
-          scriptPubKey = Bitcore.Script.buildMultisigOut(address.publicKeys, wallet.m).toScriptHashOut();
-          break;
-        case Constants.SCRIPT_TYPES.P2PKH:
-          scriptPubKey = Bitcore.Script.buildPublicKeyHashOut(address.address);
-          break;
-      }
-      should.exist(scriptPubKey);
-
-      return {
-        txid: helpers.randomTXID(),
-        vout: Math.floor(Math.random() * 10 + 1),
-        satoshis: helpers.toSatoshi(amount),
-        scriptPubKey: scriptPubKey.toBuffer().toString('hex'),
-        address: address.address,
-        confirmations: confirmations
+      blockchainExplorer.getUnspentUtxos = function(addresses, cb) {
+        var selected = _.filter(helpers._utxos, function(utxo) {
+          return _.contains(addresses, utxo.address);
+        });
+        return cb(null, selected);
       };
-    }));
-    blockchainExplorer.getUnspentUtxos = function(addresses, cb) {
-      var selected = _.filter(utxos, function(utxo) {
-        return _.contains(addresses, utxo.address);
-      });
-      return cb(null, selected);
-    };
 
-    return cb(utxos);
+      return next();
+    },
+  ], function(err) {
+    should.not.exist(err);
+    return cb(helpers._utxos);
   });
 };
 
@@ -356,7 +384,7 @@ helpers.createSimpleProposalOpts = function(toAddress, amount, signingKey, opts)
     toAddress: toAddress,
     amount: amount,
   }];
-  return helpers.createProposalOpts(Model.TxProposal.Types.SIMPLE, outputs, signingKey, opts);
+  return helpers.createProposalOpts(Model.TxProposalLegacy.Types.SIMPLE, outputs, signingKey, opts);
 };
 
 helpers.createExternalProposalOpts = function(toAddress, amount, signingKey, moreOpts, inputs) {
@@ -368,8 +396,42 @@ helpers.createExternalProposalOpts = function(toAddress, amount, signingKey, mor
     inputs = moreOpts;
     moreOpts = null;
   }
-  return helpers.createProposalOpts(Model.TxProposal.Types.EXTERNAL, outputs, signingKey, moreOpts, inputs);
+  return helpers.createProposalOpts(Model.TxProposalLegacy.Types.EXTERNAL, outputs, signingKey, moreOpts, inputs);
 };
+
+
+helpers.createProposalOpts2 = function(outputs, moreOpts, inputs) {
+  _.each(outputs, function(output) {
+    output.amount = helpers.toSatoshi(output.amount);
+  });
+
+  var opts = {
+    outputs: outputs,
+    inputs: inputs || [],
+  };
+
+  if (moreOpts) {
+    moreOpts = _.pick(moreOpts, ['feePerKb', 'customData', 'message']);
+    opts = _.assign(opts, moreOpts);
+  }
+
+  opts = _.defaults(opts, {
+    message: null
+  });
+
+  return opts;
+};
+
+helpers.getProposalSignatureOpts = function(txp, signingKey) {
+  var raw = txp.getRawTx();
+  var proposalSignature = helpers.signMessage(raw, signingKey);
+
+  return {
+    txProposalId: txp.id,
+    proposalSignature: proposalSignature,
+  }
+};
+
 
 helpers.createProposalOpts = function(type, outputs, signingKey, moreOpts, inputs) {
   _.each(outputs, function(output) {
@@ -383,9 +445,7 @@ helpers.createProposalOpts = function(type, outputs, signingKey, moreOpts, input
   };
 
   if (moreOpts) {
-    moreOpts = _.chain(moreOpts)
-      .pick(['feePerKb', 'customData', 'message'])
-      .value();
+    moreOpts = _.pick(moreOpts, ['feePerKb', 'customData', 'message', 'payProUrl']);
     opts = _.assign(opts, moreOpts);
   }
 
@@ -394,12 +454,12 @@ helpers.createProposalOpts = function(type, outputs, signingKey, moreOpts, input
   });
 
   var hash;
-  if (type == Model.TxProposal.Types.SIMPLE) {
+  if (type == Model.TxProposalLegacy.Types.SIMPLE) {
     opts.toAddress = outputs[0].toAddress;
     opts.amount = outputs[0].amount;
     hash = WalletService._getProposalHash(opts.toAddress, opts.amount,
       opts.message, opts.payProUrl);
-  } else if (type == Model.TxProposal.Types.MULTIPLEOUTPUTS || type == Model.TxProposal.Types.EXTERNAL) {
+  } else if (type == Model.TxProposalLegacy.Types.MULTIPLEOUTPUTS || type == Model.TxProposalLegacy.Types.EXTERNAL) {
     opts.outputs = outputs;
     var header = {
       outputs: outputs,
@@ -415,18 +475,17 @@ helpers.createProposalOpts = function(type, outputs, signingKey, moreOpts, input
 
   return opts;
 };
-
 helpers.createAddresses = function(server, wallet, main, change, cb) {
-  var clock = sinon.useFakeTimers(Date.now(), 'Date');
-  async.map(_.range(main + change), function(i, next) {
-    clock.tick(1000);
+  // var clock = sinon.useFakeTimers('Date');
+  async.mapSeries(_.range(main + change), function(i, next) {
+    // clock.tick(1000);
     var address = wallet.createAddress(i >= main);
     server.storage.storeAddressAndWallet(wallet, address, function(err) {
       next(err, address);
     });
   }, function(err, addresses) {
-    if (err) throw new Error('Could not generate addresses');
-    clock.restore();
+    should.not.exist(err);
+    // clock.restore();
     return cb(_.take(addresses, main), _.takeRight(addresses, change));
   });
 };

@@ -23,9 +23,8 @@ var WalletService = require('../../lib/server');
 
 var TestData = require('../testdata');
 var helpers = require('./helpers');
-var storage, blockchainExplorer;
+var storage, blockchainExplorer, request;
 
-var CLIENT_VERSION = 'bwc-0.1.1';
 
 describe('Wallet service', function() {
   before(function(done) {
@@ -35,6 +34,7 @@ describe('Wallet service', function() {
     helpers.beforeEach(function(res) {
       storage = res.storage;
       blockchainExplorer = res.blockchainExplorer;
+      request = res.request;
       done();
     });
   });
@@ -723,7 +723,7 @@ describe('Wallet service', function() {
         var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, TestData.copayers[0].privKey_1H_0, {
           message: 'some message'
         });
-        server.createTx(txOpts, function(err, tx) {
+        server.createTxLegacy(txOpts, function(err, tx) {
           should.not.exist(err);
           should.exist(tx);
           server.getStatus({}, function(err, status) {
@@ -1260,7 +1260,7 @@ describe('Wallet service', function() {
         copayerId: copayerId,
         message: msg,
         signature: sig,
-        clientVersion: CLIENT_VERSION,
+        clientVersion: helpers.CLIENT_VERSION,
       }, function(err, server) {
         return cb(err, server);
       });
@@ -1341,7 +1341,7 @@ describe('Wallet service', function() {
           should.not.exist(err);
           getAuthServer(opts.copayerId, reqPrivKey, function(err, server2) {
             var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.8, reqPrivKey);
-            server2.createTx(txOpts, function(err, tx) {
+            server2.createTxLegacy(txOpts, function(err, tx) {
               should.not.exist(err);
               done();
             });
@@ -1383,7 +1383,7 @@ describe('Wallet service', function() {
           should.not.exist(err);
           getAuthServer(opts.copayerId, reqPrivKey, function(err, server2) {
             var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.8, reqPrivKey);
-            server2.createTx(txOpts, function(err, tx) {
+            server2.createTxLegacy(txOpts, function(err, tx) {
               should.not.exist(err);
               server2.getPendingTxs({}, function(err, txs) {
                 should.not.exist(err);
@@ -1418,6 +1418,7 @@ describe('Wallet service', function() {
           balance.lockedAmount.should.equal(0);
           balance.availableAmount.should.equal(helpers.toSatoshi(6));
           balance.totalBytesToSendMax.should.equal(578);
+          balance.totalBytesToSendConfirmedMax.should.equal(418);
 
           balance.totalConfirmedAmount.should.equal(helpers.toSatoshi(4));
           balance.lockedConfirmedAmount.should.equal(0);
@@ -1501,6 +1502,316 @@ describe('Wallet service', function() {
           err.toString().should.equal('dummy error');
           done();
         });
+      });
+    });
+  });
+
+  describe('#getBalance 2 steps', function() {
+    var server, wallet, clock;
+    var _threshold = Defaults.TWO_STEP_BALANCE_THRESHOLD;
+    beforeEach(function(done) {
+      clock = sinon.useFakeTimers(Date.now(), 'Date');
+      Defaults.TWO_STEP_BALANCE_THRESHOLD = 0;
+
+      helpers.createAndJoinWallet(1, 1, function(s, w) {
+        server = s;
+        wallet = w;
+        done();
+      });
+    });
+    afterEach(function() {
+      clock.restore();
+      Defaults.TWO_STEP_BALANCE_THRESHOLD = _threshold;
+    });
+
+    it('should get balance', function(done) {
+      helpers.stubUtxos(server, wallet, [1, 'u2', 3], function() {
+        server.getBalance({
+          twoStep: true
+        }, function(err, balance) {
+          should.not.exist(err);
+          should.exist(balance);
+          balance.totalAmount.should.equal(helpers.toSatoshi(6));
+          balance.lockedAmount.should.equal(0);
+          balance.availableAmount.should.equal(helpers.toSatoshi(6));
+          balance.totalBytesToSendMax.should.equal(578);
+
+          balance.totalConfirmedAmount.should.equal(helpers.toSatoshi(4));
+          balance.lockedConfirmedAmount.should.equal(0);
+          balance.availableConfirmedAmount.should.equal(helpers.toSatoshi(4));
+
+          should.exist(balance.byAddress);
+          balance.byAddress.length.should.equal(2);
+          balance.byAddress[0].amount.should.equal(helpers.toSatoshi(4));
+          balance.byAddress[1].amount.should.equal(helpers.toSatoshi(2));
+          setTimeout(done, 100);
+        });
+      });
+    });
+
+    it('should trigger notification when balance of non-prioritary addresses is updated', function(done) {
+      var oldAddrs, newAddrs;
+
+      async.series([
+
+        function(next) {
+          helpers.createAddresses(server, wallet, 2, 0, function(addrs) {
+            oldAddrs = addrs;
+            next();
+          });
+        },
+        function(next) {
+          clock.tick(7 * 24 * 3600 * 1000);
+          helpers.createAddresses(server, wallet, 2, 0, function(addrs) {
+            newAddrs = addrs;
+            server._getActiveAddresses(function(err, active) {
+              should.not.exist(err);
+              should.not.exist(active);
+              helpers.stubUtxos(server, wallet, [1, 2], {
+                addresses: [oldAddrs[0], newAddrs[0]],
+              }, function() {
+                next();
+              });
+            });
+          });
+        },
+        function(next) {
+          server.getBalance({
+            twoStep: true
+          }, function(err, balance) {
+            should.not.exist(err);
+            should.exist(balance);
+            balance.totalAmount.should.equal(helpers.toSatoshi(3));
+            next();
+          });
+        },
+        function(next) {
+          setTimeout(next, 100);
+        },
+        function(next) {
+          server._getActiveAddresses(function(err, active) {
+            should.not.exist(err);
+            should.exist(active);
+            active.length.should.equal(3);
+            next();
+          });
+        },
+        function(next) {
+          helpers.stubUtxos(server, wallet, 0.5, {
+            addresses: oldAddrs[1],
+            keepUtxos: true,
+          }, function() {
+            next();
+          });
+        },
+        function(next) {
+          server.getBalance({
+            twoStep: true
+          }, function(err, balance) {
+            should.not.exist(err);
+            should.exist(balance);
+            balance.totalAmount.should.equal(helpers.toSatoshi(3));
+            next();
+          });
+        },
+        function(next) {
+          setTimeout(next, 100);
+        },
+        function(next) {
+          server.getNotifications({}, function(err, notifications) {
+            should.not.exist(err);
+            var last = _.last(notifications);
+            last.type.should.equal('BalanceUpdated');
+            var balance = last.data;
+            balance.totalAmount.should.equal(helpers.toSatoshi(3.5));
+            next();
+          });
+        },
+      ], function(err) {
+        should.not.exist(err);
+        done();
+      });
+    });
+
+    it('should not trigger notification when only balance of prioritary addresses is updated', function(done) {
+      var oldAddrs, newAddrs;
+
+      async.series([
+
+        function(next) {
+          helpers.createAddresses(server, wallet, 2, 0, function(addrs) {
+            oldAddrs = addrs;
+            next();
+          });
+        },
+        function(next) {
+          clock.tick(7 * 24 * 3600 * 1000);
+          helpers.createAddresses(server, wallet, 2, 0, function(addrs) {
+            newAddrs = addrs;
+            helpers.stubUtxos(server, wallet, [1, 2], {
+              addresses: newAddrs,
+            }, function() {
+              next();
+            });
+          });
+        },
+        function(next) {
+          server.getBalance({
+            twoStep: true
+          }, function(err, balance) {
+            should.not.exist(err);
+            should.exist(balance);
+            balance.totalAmount.should.equal(helpers.toSatoshi(3));
+            next();
+          });
+        },
+        function(next) {
+          setTimeout(next, 100);
+        },
+        function(next) {
+          helpers.stubUtxos(server, wallet, 0.5, {
+            addresses: newAddrs[0],
+            keepUtxos: true,
+          }, function() {
+            next();
+          });
+        },
+        function(next) {
+          server.getBalance({
+            twoStep: true
+          }, function(err, balance) {
+            should.not.exist(err);
+            should.exist(balance);
+            balance.totalAmount.should.equal(helpers.toSatoshi(3.5));
+            next();
+          });
+        },
+        function(next) {
+          setTimeout(next, 100);
+        },
+        function(next) {
+          server.getNotifications({}, function(err, notifications) {
+            should.not.exist(err);
+            var last = _.last(notifications);
+            last.type.should.not.equal('BalanceUpdated');
+            next();
+          });
+        },
+      ], function(err) {
+        should.not.exist(err);
+        done();
+      });
+    });
+
+    it('should resolve balance of new addresses immediately', function(done) {
+      var addresses;
+
+      async.series([
+
+        function(next) {
+          helpers.createAddresses(server, wallet, 4, 0, function(addrs) {
+            addresses = addrs;
+            helpers.stubUtxos(server, wallet, [1, 2], {
+              addresses: _.take(addresses, 2),
+            }, function() {
+              next();
+            });
+          });
+        },
+        function(next) {
+          server.getBalance({
+            twoStep: true
+          }, function(err, balance) {
+            should.not.exist(err);
+            should.exist(balance);
+            balance.totalAmount.should.equal(helpers.toSatoshi(3));
+            next();
+          });
+        },
+        function(next) {
+          server.createAddress({}, function(err, addr) {
+            helpers.stubUtxos(server, wallet, 0.5, {
+              addresses: addr,
+              keepUtxos: true,
+            }, function() {
+              next();
+            });
+          });
+        },
+        function(next) {
+          server.getBalance({
+            twoStep: true
+          }, function(err, balance) {
+            should.not.exist(err);
+            should.exist(balance);
+            balance.totalAmount.should.equal(helpers.toSatoshi(3.5));
+            next();
+          });
+        },
+        function(next) {
+          setTimeout(next, 100);
+        },
+        function(next) {
+          server.getNotifications({}, function(err, notifications) {
+            should.not.exist(err);
+            var last = _.last(notifications);
+            last.type.should.not.equal('BalanceUpdated');
+            next();
+          });
+        },
+      ], function(err) {
+        should.not.exist(err);
+        done();
+      });
+    });
+
+    it('should not perform 2 steps when nb of addresses below threshold', function(done) {
+      var oldAddrs, newAddrs;
+      Defaults.TWO_STEP_BALANCE_THRESHOLD = 5;
+
+      async.series([
+
+        function(next) {
+          helpers.createAddresses(server, wallet, 2, 0, function(addrs) {
+            oldAddrs = addrs;
+            next();
+          });
+        },
+        function(next) {
+          clock.tick(7 * 24 * 3600 * 1000);
+          helpers.createAddresses(server, wallet, 2, 0, function(addrs) {
+            newAddrs = addrs;
+            helpers.stubUtxos(server, wallet, [1, 2], {
+              addresses: [oldAddrs[0], newAddrs[0]],
+            }, function() {
+              next();
+            });
+          });
+        },
+        function(next) {
+          server.getBalance({
+            twoStep: true
+          }, function(err, balance) {
+            should.not.exist(err);
+            should.exist(balance);
+            balance.totalAmount.should.equal(helpers.toSatoshi(3));
+            next();
+          });
+        },
+        function(next) {
+          setTimeout(next, 100);
+        },
+        function(next) {
+          server.getNotifications({}, function(err, notifications) {
+            should.not.exist(err);
+            var last = _.last(notifications);
+            last.type.should.not.equal('BalanceUpdated');
+            next();
+          });
+        },
+      ], function(err) {
+        should.not.exist(err);
+        done();
       });
     });
   });
@@ -1626,7 +1937,7 @@ describe('Wallet service', function() {
           should.not.exist(err);
           helpers.getAuthServer(result.copayerId, function(server, wallet) {
             var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, TestData.copayers[0].privKey);
-            server.createTx(txOpts, function(err, tx) {
+            server.createTxLegacy(txOpts, function(err, tx) {
               should.not.exist(tx);
               should.exist(err);
               err.code.should.equal('WALLET_NOT_COMPLETE');
@@ -1639,149 +1950,292 @@ describe('Wallet service', function() {
   });
 
   describe('#createTx', function() {
-    var server, wallet;
-    beforeEach(function(done) {
-      helpers.createAndJoinWallet(2, 3, function(s, w) {
-        server = s;
-        wallet = w;
-        done();
-      });
-    });
+    describe('Legacy', function() {
 
-    it('should create a tx', function(done) {
-      helpers.stubUtxos(server, wallet, [100, 200], function() {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, TestData.copayers[0].privKey_1H_0, {
-          message: 'some message',
-          customData: 'some custom data'
+      var server, wallet;
+
+      beforeEach(function(done) {
+        helpers.createAndJoinWallet(2, 3, function(s, w) {
+          server = s;
+          wallet = w;
+          done();
         });
-        server.createTx(txOpts, function(err, tx) {
-          should.not.exist(err);
-          should.exist(tx);
-          tx.walletId.should.equal(wallet.id);
-          tx.network.should.equal('livenet');
-          tx.creatorId.should.equal(wallet.copayers[0].id);
-          tx.message.should.equal('some message');
-          tx.customData.should.equal('some custom data');
-          tx.isAccepted().should.equal.false;
-          tx.isRejected().should.equal.false;
-          tx.amount.should.equal(helpers.toSatoshi(80));
-          var estimatedFee = Defaults.DEFAULT_FEE_PER_KB * 400 / 1000; // fully signed tx should have about 400 bytes
-          tx.fee.should.be.within(0.9 * estimatedFee, 1.1 * estimatedFee);
-          server.getPendingTxs({}, function(err, txs) {
+      });
+
+      it('should create a tx', function(done) {
+        helpers.stubUtxos(server, wallet, [100, 200], function() {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, TestData.copayers[0].privKey_1H_0, {
+            message: 'some message',
+            customData: 'some custom data',
+          });
+          server.createTxLegacy(txOpts, function(err, tx) {
             should.not.exist(err);
-            txs.length.should.equal(1);
-            // creator
-            txs[0].deleteLockTime.should.equal(0);
+            should.exist(tx);
+            tx.walletId.should.equal(wallet.id);
+            tx.network.should.equal('livenet');
+            tx.creatorId.should.equal(wallet.copayers[0].id);
+            tx.message.should.equal('some message');
+            tx.customData.should.equal('some custom data');
+            tx.isAccepted().should.equal.false;
+            tx.isRejected().should.equal.false;
+            tx.amount.should.equal(helpers.toSatoshi(80));
+            var estimatedFee = Defaults.DEFAULT_FEE_PER_KB * 400 / 1000; // fully signed tx should have about 400 bytes
+            tx.fee.should.be.within(0.9 * estimatedFee, 1.1 * estimatedFee);
+            server.getPendingTxs({}, function(err, txs) {
+              should.not.exist(err);
+              txs.length.should.equal(1);
+              // creator
+              txs[0].deleteLockTime.should.equal(0);
+              server.getBalance({}, function(err, balance) {
+                should.not.exist(err);
+                balance.totalAmount.should.equal(helpers.toSatoshi(300));
+                balance.lockedAmount.should.equal(tx.inputs[0].satoshis);
+                balance.lockedAmount.should.be.below(balance.totalAmount);
+                balance.availableAmount.should.equal(balance.totalAmount - balance.lockedAmount);
+                server.storage.fetchAddresses(wallet.id, function(err, addresses) {
+                  should.not.exist(err);
+                  var change = _.filter(addresses, {
+                    isChange: true
+                  });
+                  change.length.should.equal(1);
+                  done();
+                });
+              });
+            });
+          });
+        });
+      });
+
+      it('should generate new change address for each created tx', function(done) {
+        helpers.stubUtxos(server, wallet, [1, 2], function() {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.8, TestData.copayers[0].privKey_1H_0);
+          server.createTxLegacy(txOpts, function(err, tx1) {
+            should.not.exist(err);
+            should.exist(tx1);
+            var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.8, TestData.copayers[0].privKey_1H_0);
+            server.createTxLegacy(txOpts, function(err, tx2) {
+              should.not.exist(err);
+              should.exist(tx2);
+              tx1.changeAddress.address.should.not.equal(tx2.changeAddress.address);
+              done();
+            });
+          });
+        });
+      });
+
+      it('should create a tx with legacy signature', function(done) {
+        helpers.stubUtxos(server, wallet, [100, 200], function() {
+          var txOpts = helpers.createProposalOptsLegacy('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, 'some message', TestData.copayers[0].privKey_1H_0);
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.not.exist(err);
+            should.exist(tx);
+            done();
+          });
+        });
+      });
+
+      it('should support creating a tx with no change address', function(done) {
+        helpers.stubUtxos(server, wallet, [1, 2], function() {
+          var max = 3 - (7200 / 1e8); // Fees for this tx at 100bits/kB = 7200 sat
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', max, TestData.copayers[0].privKey_1H_0);
+          server.createTxLegacy(txOpts, function(err, txp) {
+            should.not.exist(err);
+            should.exist(txp);
+            var t = txp.getBitcoreTx().toObject();
+            t.outputs.length.should.equal(1);
+            t.outputs[0].satoshis.should.equal(max * 1e8);
+            done();
+          });
+        });
+      });
+
+      it('should create a tx using confirmed utxos first', function(done) {
+        helpers.stubUtxos(server, wallet, [1.3, 'u0.5', 'u0.1', 1.2], function(utxos) {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1.5, TestData.copayers[0].privKey_1H_0, {
+            message: 'some message'
+          });
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.not.exist(err);
+            should.exist(tx);
+            tx.inputs.length.should.equal(2);
+            _.difference(_.pluck(tx.inputs, 'txid'), [utxos[0].txid, utxos[3].txid]).length.should.equal(0);
+            done();
+          });
+        });
+      });
+
+      it('should use unconfirmed utxos only when no more confirmed utxos are available', function(done) {
+        helpers.stubUtxos(server, wallet, [1.3, 'u0.5', 'u0.1', 1.2], function(utxos) {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 2.55, TestData.copayers[0].privKey_1H_0, {
+            message: 'some message'
+          });
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.not.exist(err);
+            should.exist(tx);
+            tx.inputs.length.should.equal(3);
+            var txids = _.pluck(tx.inputs, 'txid');
+            txids.should.contain(utxos[0].txid);
+            txids.should.contain(utxos[3].txid);
+            done();
+          });
+        });
+      });
+
+      it('should exclude unconfirmed utxos if specified', function(done) {
+        helpers.stubUtxos(server, wallet, [1.3, 'u2', 'u0.1', 1.2], function(utxos) {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 3, TestData.copayers[0].privKey_1H_0, {
+            message: 'some message'
+          });
+          txOpts.excludeUnconfirmedUtxos = true;
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.exist(err);
+            err.code.should.equal('INSUFFICIENT_FUNDS');
+            err.message.should.equal('Insufficient funds');
+            var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 2.5, TestData.copayers[0].privKey_1H_0, {
+              message: 'some message'
+            });
+            txOpts.excludeUnconfirmedUtxos = true;
+            server.createTxLegacy(txOpts, function(err, tx) {
+              should.exist(err);
+              err.code.should.equal('INSUFFICIENT_FUNDS_FOR_FEE');
+              err.message.should.equal('Insufficient funds for fee');
+              done();
+            });
+          });
+        });
+      });
+
+      it('should use non-locked confirmed utxos when specified', function(done) {
+        helpers.stubUtxos(server, wallet, [1.3, 'u2', 'u0.1', 1.2], function(utxos) {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1.4, TestData.copayers[0].privKey_1H_0, {
+            message: 'some message'
+          });
+          txOpts.excludeUnconfirmedUtxos = true;
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.not.exist(err);
+            should.exist(tx);
+            tx.inputs.length.should.equal(2);
             server.getBalance({}, function(err, balance) {
               should.not.exist(err);
-              balance.totalAmount.should.equal(helpers.toSatoshi(300));
-              balance.lockedAmount.should.equal(tx.inputs[0].satoshis);
-              balance.lockedAmount.should.be.below(balance.totalAmount);
-              balance.availableAmount.should.equal(balance.totalAmount - balance.lockedAmount);
-              server.storage.fetchAddresses(wallet.id, function(err, addresses) {
-                should.not.exist(err);
-                var change = _.filter(addresses, {
-                  isChange: true
-                });
-                change.length.should.equal(1);
+              balance.lockedConfirmedAmount.should.equal(helpers.toSatoshi(2.5));
+              balance.availableConfirmedAmount.should.equal(0);
+              var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.01, TestData.copayers[0].privKey_1H_0, {
+                message: 'some message'
+              });
+              txOpts.excludeUnconfirmedUtxos = true;
+              server.createTxLegacy(txOpts, function(err, tx) {
+                should.exist(err);
+                err.code.should.equal('LOCKED_FUNDS');
                 done();
               });
             });
           });
         });
       });
-    });
 
-    it('should generate new change address for each created tx', function(done) {
-      helpers.stubUtxos(server, wallet, [1, 2], function() {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.8, TestData.copayers[0].privKey_1H_0);
-        server.createTx(txOpts, function(err, tx1) {
+      it('should fail gracefully if unable to reach the blockchain', function(done) {
+        blockchainExplorer.getUnspentUtxos = sinon.stub().callsArgWith(1, 'dummy error');
+        server.createAddress({}, function(err, address) {
           should.not.exist(err);
-          should.exist(tx1);
-          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.8, TestData.copayers[0].privKey_1H_0);
-          server.createTx(txOpts, function(err, tx2) {
-            should.not.exist(err);
-            should.exist(tx2);
-            tx1.changeAddress.address.should.not.equal(tx2.changeAddress.address);
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, TestData.copayers[0].privKey_1H_0, {
+            message: 'some message'
+          });
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.exist(err);
+            err.toString().should.equal('dummy error');
             done();
           });
         });
       });
-    });
 
-    it('should create a tx with legacy signature', function(done) {
-      helpers.stubUtxos(server, wallet, [100, 200], function() {
-        var txOpts = helpers.createProposalOptsLegacy('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, 'some message', TestData.copayers[0].privKey_1H_0);
-        server.createTx(txOpts, function(err, tx) {
-          should.not.exist(err);
-          should.exist(tx);
-          done();
-        });
-      });
-    });
+      it('should fail to create tx with invalid proposal signature', function(done) {
+        helpers.stubUtxos(server, wallet, [100, 200], function() {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, 'dummy');
 
-    it('should support creating a tx with no change address', function(done) {
-      helpers.stubUtxos(server, wallet, [1, 2], function() {
-        var max = 3 - (7200 / 1e8); // Fees for this tx at 100bits/kB = 7200 sat
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', max, TestData.copayers[0].privKey_1H_0);
-        server.createTx(txOpts, function(err, txp) {
-          should.not.exist(err);
-          should.exist(txp);
-          var t = txp.getBitcoreTx().toObject();
-          t.outputs.length.should.equal(1);
-          t.outputs[0].satoshis.should.equal(max * 1e8);
-          done();
-        });
-      });
-    });
-
-    it('should create a tx using confirmed utxos first', function(done) {
-      helpers.stubUtxos(server, wallet, [1.3, 'u0.5', 'u0.1', 1.2], function(utxos) {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1.5, TestData.copayers[0].privKey_1H_0, {
-          message: 'some message'
-        });
-        server.createTx(txOpts, function(err, tx) {
-          should.not.exist(err);
-          should.exist(tx);
-          tx.inputs.length.should.equal(2);
-          _.difference(_.pluck(tx.inputs, 'txid'), [utxos[0].txid, utxos[3].txid]).length.should.equal(0);
-          done();
-        });
-      });
-    });
-
-    it('should use unconfirmed utxos only when no more confirmed utxos are available', function(done) {
-      helpers.stubUtxos(server, wallet, [1.3, 'u0.5', 'u0.1', 1.2], function(utxos) {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 2.55, TestData.copayers[0].privKey_1H_0, {
-          message: 'some message'
-        });
-        server.createTx(txOpts, function(err, tx) {
-          should.not.exist(err);
-          should.exist(tx);
-          tx.inputs.length.should.equal(3);
-          var txids = _.pluck(tx.inputs, 'txid');
-          txids.should.contain(utxos[0].txid);
-          txids.should.contain(utxos[3].txid);
-          done();
-        });
-      });
-    });
-
-    it('should exclude unconfirmed utxos if specified', function(done) {
-      helpers.stubUtxos(server, wallet, [1.3, 'u2', 'u0.1', 1.2], function(utxos) {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 3, TestData.copayers[0].privKey_1H_0, {
-          message: 'some message'
-        });
-        txOpts.excludeUnconfirmedUtxos = true;
-        server.createTx(txOpts, function(err, tx) {
-          should.exist(err);
-          err.code.should.equal('INSUFFICIENT_FUNDS');
-          err.message.should.equal('Insufficient funds');
-          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 2.5, TestData.copayers[0].privKey_1H_0, {
-            message: 'some message'
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.not.exist(tx);
+            should.exist(err);
+            err.message.should.equal('Invalid proposal signature');
+            done();
           });
-          txOpts.excludeUnconfirmedUtxos = true;
-          server.createTx(txOpts, function(err, tx) {
+        });
+      });
+
+      it('should fail to create tx with proposal signed by another copayer', function(done) {
+        helpers.stubUtxos(server, wallet, [100, 200], function() {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, TestData.copayers[1].privKey_1H_0);
+
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.not.exist(tx);
+            should.exist(err);
+            err.message.should.equal('Invalid proposal signature');
+            done();
+          });
+        });
+      });
+
+      it('should fail to create tx for invalid address', function(done) {
+        helpers.stubUtxos(server, wallet, [100, 200], function() {
+          var txOpts = helpers.createSimpleProposalOpts('invalid address', 80, TestData.copayers[0].privKey_1H_0);
+
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.exist(err);
+            should.not.exist(tx);
+            // may fail due to Non-base58 character, or Checksum mismatch, or other
+            done();
+          });
+        });
+      });
+
+      it('should fail to create tx for address of different network', function(done) {
+        helpers.stubUtxos(server, wallet, [100, 200], function() {
+          var txOpts = helpers.createSimpleProposalOpts('myE38JHdxmQcTJGP1ZiX4BiGhDxMJDvLJD', 80, TestData.copayers[0].privKey_1H_0);
+
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.not.exist(tx);
+            should.exist(err);
+            err.code.should.equal('INCORRECT_ADDRESS_NETWORK');
+            err.message.should.equal('Incorrect address network');
+            done();
+          });
+        });
+      });
+
+      it('should fail to create tx for invalid amount', function(done) {
+        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0, TestData.copayers[0].privKey_1H_0);
+        server.createTxLegacy(txOpts, function(err, tx) {
+          should.not.exist(tx);
+          should.exist(err);
+          err.message.should.equal('Invalid amount');
+          done();
+        });
+      });
+
+      it('should fail to create tx when insufficient funds', function(done) {
+        helpers.stubUtxos(server, wallet, [100], function() {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 120, TestData.copayers[0].privKey_1H_0);
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.exist(err);
+            err.code.should.equal('INSUFFICIENT_FUNDS');
+            err.message.should.equal('Insufficient funds');
+            server.getPendingTxs({}, function(err, txs) {
+              should.not.exist(err);
+              txs.length.should.equal(0);
+              server.getBalance({}, function(err, balance) {
+                should.not.exist(err);
+                balance.lockedAmount.should.equal(0);
+                balance.totalAmount.should.equal(10000000000);
+                done();
+              });
+            });
+          });
+        });
+      });
+
+      it('should fail to create tx when insufficient funds for fee', function(done) {
+        helpers.stubUtxos(server, wallet, 0.048222, function() {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.048200, TestData.copayers[0].privKey_1H_0);
+          server.createTxLegacy(txOpts, function(err, tx) {
             should.exist(err);
             err.code.should.equal('INSUFFICIENT_FUNDS_FOR_FEE');
             err.message.should.equal('Insufficient funds for fee');
@@ -1789,544 +2243,721 @@ describe('Wallet service', function() {
           });
         });
       });
-    });
 
-    it('should use non-locked confirmed utxos when specified', function(done) {
-      helpers.stubUtxos(server, wallet, [1.3, 'u2', 'u0.1', 1.2], function(utxos) {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1.4, TestData.copayers[0].privKey_1H_0, {
-          message: 'some message'
-        });
-        txOpts.excludeUnconfirmedUtxos = true;
-        server.createTx(txOpts, function(err, tx) {
-          should.not.exist(err);
-          should.exist(tx);
-          tx.inputs.length.should.equal(2);
-          server.getBalance({}, function(err, balance) {
+      it('should scale fees according to tx size', function(done) {
+        helpers.stubUtxos(server, wallet, [1, 1, 1, 1], function() {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 3.5, TestData.copayers[0].privKey_1H_0);
+          server.createTxLegacy(txOpts, function(err, tx) {
             should.not.exist(err);
-            balance.lockedConfirmedAmount.should.equal(helpers.toSatoshi(2.5));
-            balance.availableConfirmedAmount.should.equal(0);
-            var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.01, TestData.copayers[0].privKey_1H_0, {
-              message: 'some message'
+            var estimatedFee = Defaults.DEFAULT_FEE_PER_KB * 1300 / 1000; // fully signed tx should have about 1300 bytes
+            tx.fee.should.be.within(0.9 * estimatedFee, 1.1 * estimatedFee);
+            done();
+          });
+        });
+      });
+
+      it('should be possible to use a smaller fee', function(done) {
+        helpers.stubUtxos(server, wallet, 1, function() {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.99995, TestData.copayers[0].privKey_1H_0, {
+            feePerKb: 80000
+          });
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.exist(err);
+            err.code.should.equal('INSUFFICIENT_FUNDS_FOR_FEE');
+            var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.99995, TestData.copayers[0].privKey_1H_0, {
+              feePerKb: 5000
             });
-            txOpts.excludeUnconfirmedUtxos = true;
-            server.createTx(txOpts, function(err, tx) {
-              should.exist(err);
-              err.code.should.equal('LOCKED_FUNDS');
-              done();
+            server.createTxLegacy(txOpts, function(err, tx) {
+              should.not.exist(err);
+              var estimatedFee = 5000 * 400 / 1000; // fully signed tx should have about 400 bytes
+              tx.fee.should.be.within(0.9 * estimatedFee, 1.1 * estimatedFee);
+
+              // Sign it to make sure Bitcore doesn't complain about the fees
+              var signatures = helpers.clientSign(tx, TestData.copayers[0].xPrivKey_44H_0H_0H);
+              server.signTx({
+                txProposalId: tx.id,
+                signatures: signatures,
+              }, function(err) {
+                should.not.exist(err);
+                done();
+              });
             });
           });
         });
       });
-    });
 
-    it('should fail gracefully if unable to reach the blockchain', function(done) {
-      blockchainExplorer.getUnspentUtxos = sinon.stub().callsArgWith(1, 'dummy error');
-      server.createAddress({}, function(err, address) {
-        should.not.exist(err);
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, TestData.copayers[0].privKey_1H_0, {
-          message: 'some message'
-        });
-        server.createTx(txOpts, function(err, tx) {
-          should.exist(err);
-          err.toString().should.equal('dummy error');
-          done();
+      it('should fail to create tx for dust amount', function(done) {
+        helpers.stubUtxos(server, wallet, [1], function() {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.00000001, TestData.copayers[0].privKey_1H_0);
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.exist(err);
+            err.code.should.equal('DUST_AMOUNT');
+            err.message.should.equal('Amount below dust threshold');
+            done();
+          });
         });
       });
-    });
 
-    it('should fail to create tx with invalid proposal signature', function(done) {
-      helpers.stubUtxos(server, wallet, [100, 200], function() {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, 'dummy');
+      it('should fail to create tx that would return change for dust amount', function(done) {
+        helpers.stubUtxos(server, wallet, [1], function() {
+          var fee = 4095 / 1e8; // The exact fee of the resulting tx
+          var change = 100 / 1e8; // Below dust
+          var amount = 1 - fee - change;
 
-        server.createTx(txOpts, function(err, tx) {
-          should.not.exist(tx);
-          should.exist(err);
-          err.message.should.equal('Invalid proposal signature');
-          done();
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', amount, TestData.copayers[0].privKey_1H_0, {
+            feePerKb: 10000
+          });
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.exist(err);
+            err.code.should.equal('DUST_AMOUNT');
+            err.message.should.equal('Amount below dust threshold');
+            done();
+          });
         });
       });
-    });
 
-    it('should fail to create tx with proposal signed by another copayer', function(done) {
-      helpers.stubUtxos(server, wallet, [100, 200], function() {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, TestData.copayers[1].privKey_1H_0);
-
-        server.createTx(txOpts, function(err, tx) {
-          should.not.exist(tx);
-          should.exist(err);
-          err.message.should.equal('Invalid proposal signature');
-          done();
-        });
-      });
-    });
-
-    it('should fail to create tx for invalid address', function(done) {
-      helpers.stubUtxos(server, wallet, [100, 200], function() {
-        var txOpts = helpers.createSimpleProposalOpts('invalid address', 80, TestData.copayers[0].privKey_1H_0);
-
-        server.createTx(txOpts, function(err, tx) {
-          should.exist(err);
-          should.not.exist(tx);
-          // may fail due to Non-base58 character, or Checksum mismatch, or other
-          done();
-        });
-      });
-    });
-
-    it('should fail to create tx for address of different network', function(done) {
-      helpers.stubUtxos(server, wallet, [100, 200], function() {
-        var txOpts = helpers.createSimpleProposalOpts('myE38JHdxmQcTJGP1ZiX4BiGhDxMJDvLJD', 80, TestData.copayers[0].privKey_1H_0);
-
-        server.createTx(txOpts, function(err, tx) {
-          should.not.exist(tx);
-          should.exist(err);
-          err.code.should.equal('INCORRECT_ADDRESS_NETWORK');
-          err.message.should.equal('Incorrect address network');
-          done();
-        });
-      });
-    });
-
-    it('should fail to create tx for invalid amount', function(done) {
-      var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0, TestData.copayers[0].privKey_1H_0);
-      server.createTx(txOpts, function(err, tx) {
-        should.not.exist(tx);
-        should.exist(err);
-        err.message.should.equal('Invalid amount');
-        done();
-      });
-    });
-
-    it('should fail to create tx when insufficient funds', function(done) {
-      helpers.stubUtxos(server, wallet, [100], function() {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 120, TestData.copayers[0].privKey_1H_0);
-        server.createTx(txOpts, function(err, tx) {
-          should.exist(err);
-          err.code.should.equal('INSUFFICIENT_FUNDS');
-          err.message.should.equal('Insufficient funds');
-          server.getPendingTxs({}, function(err, txs) {
+      it('should fail with different error for insufficient funds and locked funds', function(done) {
+        helpers.stubUtxos(server, wallet, [10, 10], function() {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 11, TestData.copayers[0].privKey_1H_0);
+          server.createTxLegacy(txOpts, function(err, tx) {
             should.not.exist(err);
-            txs.length.should.equal(0);
             server.getBalance({}, function(err, balance) {
               should.not.exist(err);
-              balance.lockedAmount.should.equal(0);
-              balance.totalAmount.should.equal(10000000000);
-              done();
+              balance.totalAmount.should.equal(helpers.toSatoshi(20));
+              balance.lockedAmount.should.equal(helpers.toSatoshi(20));
+              txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 8, TestData.copayers[0].privKey_1H_0);
+              server.createTxLegacy(txOpts, function(err, tx) {
+                should.exist(err);
+                err.code.should.equal('LOCKED_FUNDS');
+                err.message.should.equal('Funds are locked by pending transaction proposals');
+                done();
+              });
             });
           });
         });
       });
-    });
 
-    it('should fail to create tx when insufficient funds for fee', function(done) {
-      helpers.stubUtxos(server, wallet, 0.048222, function() {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.048200, TestData.copayers[0].privKey_1H_0);
-        server.createTx(txOpts, function(err, tx) {
-          should.exist(err);
-          err.code.should.equal('INSUFFICIENT_FUNDS_FOR_FEE');
-          err.message.should.equal('Insufficient funds for fee');
-          done();
-        });
-      });
-    });
+      it('should create tx with 0 change output', function(done) {
+        helpers.stubUtxos(server, wallet, [1], function() {
+          var fee = 4100 / 1e8; // The exact fee of the resulting tx
+          var amount = 1 - fee;
 
-    it('should scale fees according to tx size', function(done) {
-      helpers.stubUtxos(server, wallet, [1, 1, 1, 1], function() {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 3.5, TestData.copayers[0].privKey_1H_0);
-        server.createTx(txOpts, function(err, tx) {
-          should.not.exist(err);
-          var estimatedFee = Defaults.DEFAULT_FEE_PER_KB * 1300 / 1000; // fully signed tx should have about 1300 bytes
-          tx.fee.should.be.within(0.9 * estimatedFee, 1.1 * estimatedFee);
-          done();
-        });
-      });
-    });
-
-    it('should be possible to use a smaller fee', function(done) {
-      helpers.stubUtxos(server, wallet, 1, function() {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.99995, TestData.copayers[0].privKey_1H_0, {
-          feePerKb: 80000
-        });
-        server.createTx(txOpts, function(err, tx) {
-          should.exist(err);
-          err.code.should.equal('INSUFFICIENT_FUNDS_FOR_FEE');
-          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.99995, TestData.copayers[0].privKey_1H_0, {
-            feePerKb: 5000
-          });
-          server.createTx(txOpts, function(err, tx) {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', amount, TestData.copayers[0].privKey_1H_0);
+          server.createTxLegacy(txOpts, function(err, tx) {
             should.not.exist(err);
-            var estimatedFee = 5000 * 400 / 1000; // fully signed tx should have about 400 bytes
-            tx.fee.should.be.within(0.9 * estimatedFee, 1.1 * estimatedFee);
+            should.exist(tx);
+            var bitcoreTx = tx.getBitcoreTx();
+            bitcoreTx.outputs.length.should.equal(1);
+            bitcoreTx.outputs[0].satoshis.should.equal(tx.amount);
+            done();
+          });
+        });
+      });
 
-            // Sign it to make sure Bitcore doesn't complain about the fees
-            var signatures = helpers.clientSign(tx, TestData.copayers[0].xPrivKey_44H_0H_0H);
-            server.signTx({
-              txProposalId: tx.id,
-              signatures: signatures,
-            }, function(err) {
+      it('should fail gracefully when bitcore throws exception on raw tx creation', function(done) {
+        helpers.stubUtxos(server, wallet, [10], function() {
+          var bitcoreStub = sinon.stub(Bitcore, 'Transaction');
+          bitcoreStub.throws({
+            name: 'dummy',
+            message: 'dummy exception'
+          });
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 2, TestData.copayers[0].privKey_1H_0);
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.exist(err);
+            err.message.should.equal('dummy exception');
+            bitcoreStub.restore();
+            done();
+          });
+        });
+      });
+
+      it('should create tx when there is a pending tx and enough UTXOs', function(done) {
+        helpers.stubUtxos(server, wallet, [10.1, 10.2, 10.3], function() {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 12, TestData.copayers[0].privKey_1H_0);
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.not.exist(err);
+            should.exist(tx);
+            var txOpts2 = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 8, TestData.copayers[0].privKey_1H_0);
+            server.createTxLegacy(txOpts2, function(err, tx) {
               should.not.exist(err);
-              done();
+              should.exist(tx);
+              server.getPendingTxs({}, function(err, txs) {
+                should.not.exist(err);
+                txs.length.should.equal(2);
+                server.getBalance({}, function(err, balance) {
+                  should.not.exist(err);
+                  balance.totalAmount.should.equal(3060000000);
+                  balance.lockedAmount.should.equal(3060000000);
+                  done();
+                });
+              });
             });
           });
         });
       });
-    });
 
-    it('should fail to create tx for dust amount', function(done) {
-      helpers.stubUtxos(server, wallet, [1], function() {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.00000001, TestData.copayers[0].privKey_1H_0);
-        server.createTx(txOpts, function(err, tx) {
-          should.exist(err);
-          err.code.should.equal('DUST_AMOUNT');
-          err.message.should.equal('Amount below dust threshold');
-          done();
+      it('should fail to create tx when there is a pending tx and not enough UTXOs', function(done) {
+        helpers.stubUtxos(server, wallet, [10.1, 10.2, 10.3], function() {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 12, TestData.copayers[0].privKey_1H_0);
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.not.exist(err);
+            should.exist(tx);
+            var txOpts2 = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 24, TestData.copayers[0].privKey_1H_0);
+            server.createTxLegacy(txOpts2, function(err, tx) {
+              err.code.should.equal('LOCKED_FUNDS');
+              should.not.exist(tx);
+              server.getPendingTxs({}, function(err, txs) {
+                should.not.exist(err);
+                txs.length.should.equal(1);
+                server.getBalance({}, function(err, balance) {
+                  should.not.exist(err);
+                  balance.totalAmount.should.equal(helpers.toSatoshi(30.6));
+                  var amountInputs = _.sum(txs[0].inputs, 'satoshis');
+                  balance.lockedAmount.should.equal(amountInputs);
+                  balance.lockedAmount.should.be.below(balance.totalAmount);
+                  balance.availableAmount.should.equal(balance.totalAmount - balance.lockedAmount);
+                  done();
+                });
+              });
+            });
+          });
         });
       });
-    });
 
-    it('should fail to create tx that would return change for dust amount', function(done) {
-      helpers.stubUtxos(server, wallet, [1], function() {
-        var fee = 4095 / 1e8; // The exact fee of the resulting tx
-        var change = 100 / 1e8; // Below dust
-        var amount = 1 - fee - change;
-
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', amount, TestData.copayers[0].privKey_1H_0, {
-          feePerKb: 10000
-        });
-        server.createTx(txOpts, function(err, tx) {
-          should.exist(err);
-          err.code.should.equal('DUST_AMOUNT');
-          err.message.should.equal('Amount below dust threshold');
-          done();
-        });
-      });
-    });
-
-    it('should fail with different error for insufficient funds and locked funds', function(done) {
-      helpers.stubUtxos(server, wallet, [10, 10], function() {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 11, TestData.copayers[0].privKey_1H_0);
-        server.createTx(txOpts, function(err, tx) {
-          should.not.exist(err);
+      it('should create tx using different UTXOs for simultaneous requests', function(done) {
+        var N = 5;
+        helpers.stubUtxos(server, wallet, _.range(100, 100 + N, 0), function(utxos) {
           server.getBalance({}, function(err, balance) {
             should.not.exist(err);
-            balance.totalAmount.should.equal(helpers.toSatoshi(20));
-            balance.lockedAmount.should.equal(helpers.toSatoshi(20));
-            txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 8, TestData.copayers[0].privKey_1H_0);
-            server.createTx(txOpts, function(err, tx) {
-              should.exist(err);
-              err.code.should.equal('LOCKED_FUNDS');
-              err.message.should.equal('Funds are locked by pending transaction proposals');
+            balance.totalAmount.should.equal(helpers.toSatoshi(N * 100));
+            balance.lockedAmount.should.equal(0);
+            var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, TestData.copayers[0].privKey_1H_0);
+            async.map(_.range(N), function(i, cb) {
+              server.createTxLegacy(txOpts, function(err, tx) {
+                cb(err, tx);
+              });
+            }, function(err) {
+              server.getPendingTxs({}, function(err, txs) {
+                should.not.exist(err);
+                txs.length.should.equal(N);
+                _.uniq(_.pluck(txs, 'changeAddress')).length.should.equal(N);
+                server.getBalance({}, function(err, balance) {
+                  should.not.exist(err);
+                  balance.totalAmount.should.equal(helpers.toSatoshi(N * 100));
+                  balance.lockedAmount.should.equal(balance.totalAmount);
+                  done();
+                });
+              });
+            });
+          });
+        });
+      });
+
+      it('should create tx for type multiple_outputs', function(done) {
+        helpers.stubUtxos(server, wallet, [100, 200], function() {
+          var outputs = [{
+            toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
+            amount: 75,
+            message: 'message #1'
+          }, {
+            toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
+            amount: 75,
+            message: 'message #2'
+          }];
+          var txOpts = helpers.createProposalOpts(Model.TxProposalLegacy.Types.MULTIPLEOUTPUTS, outputs, TestData.copayers[0].privKey_1H_0, {
+            message: 'some message'
+          });
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.not.exist(err);
+            should.exist(tx);
+            tx.amount.should.equal(helpers.toSatoshi(150));
+            done();
+          });
+        });
+      });
+
+      it('should support creating a multiple output tx with no change address', function(done) {
+        helpers.stubUtxos(server, wallet, [1, 2], function() {
+          var max = 3 - (7560 / 1e8); // Fees for this tx at 100bits/kB = 7560 sat
+          var outputs = [{
+            toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
+            amount: 1,
+            message: 'message #1'
+          }, {
+            toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
+            amount: max - 1,
+            message: 'message #2'
+          }];
+          var txOpts = helpers.createProposalOpts(Model.TxProposalLegacy.Types.MULTIPLEOUTPUTS, outputs, TestData.copayers[0].privKey_1H_0, {
+            message: 'some message'
+          });
+          server.createTxLegacy(txOpts, function(err, txp) {
+            should.not.exist(err);
+            should.exist(txp);
+
+            var t = txp.getBitcoreTx().toObject();
+            t.outputs.length.should.equal(2);
+            _.sum(t.outputs, 'satoshis').should.equal(max * 1e8);
+            done();
+          });
+        });
+      });
+
+      it('should fail to create tx for type multiple_outputs with missing output argument', function(done) {
+        helpers.stubUtxos(server, wallet, [100, 200], function() {
+          var outputs = [{
+            amount: 80,
+            message: 'message #1',
+          }, {
+            toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
+            amount: 90,
+            message: 'message #2'
+          }];
+          var txOpts = helpers.createProposalOpts(Model.TxProposalLegacy.Types.MULTIPLEOUTPUTS, outputs, TestData.copayers[0].privKey_1H_0, {
+            message: 'some message'
+          });
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.exist(err);
+            err.message.should.contain('outputs argument missing');
+            done();
+          });
+        });
+      });
+
+      it('should fail to create tx for unsupported proposal type', function(done) {
+        helpers.stubUtxos(server, wallet, [100, 200], function() {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, TestData.copayers[0].privKey_1H_0, {
+            message: 'some message'
+          });
+          txOpts.type = 'bogus';
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.exist(err);
+            err.message.should.contain('Invalid proposal type');
+            done();
+          });
+        });
+      });
+
+      it('should be able to create tx with inputs argument', function(done) {
+        helpers.stubUtxos(server, wallet, [1, 3, 2], function(utxos) {
+          server.getUtxos({}, function(err, utxos) {
+            should.not.exist(err);
+            var inputs = [utxos[0], utxos[2]];
+            var txOpts = helpers.createExternalProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 2.5,
+              TestData.copayers[0].privKey_1H_0, inputs);
+            server.createTxLegacy(txOpts, function(err, tx) {
+              should.not.exist(err);
+              should.exist(tx);
+              tx.inputs.length.should.equal(2);
+              var txids = _.pluck(tx.inputs, 'txid');
+              txids.should.contain(utxos[0].txid);
+              txids.should.contain(utxos[2].txid);
               done();
             });
           });
         });
       });
-    });
 
-    it('should create tx with 0 change output', function(done) {
-      helpers.stubUtxos(server, wallet, [1], function() {
-        var fee = 4100 / 1e8; // The exact fee of the resulting tx
-        var amount = 1 - fee;
-
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', amount, TestData.copayers[0].privKey_1H_0);
-        server.createTx(txOpts, function(err, tx) {
-          should.not.exist(err);
-          should.exist(tx);
-          var bitcoreTx = tx.getBitcoreTx();
-          bitcoreTx.outputs.length.should.equal(1);
-          bitcoreTx.outputs[0].satoshis.should.equal(tx.amount);
-          done();
-        });
-      });
-    });
-
-    it('should fail gracefully when bitcore throws exception on raw tx creation', function(done) {
-      helpers.stubUtxos(server, wallet, [10], function() {
-        var bitcoreStub = sinon.stub(Bitcore, 'Transaction');
-        bitcoreStub.throws({
-          name: 'dummy',
-          message: 'dummy exception'
-        });
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 2, TestData.copayers[0].privKey_1H_0);
-        server.createTx(txOpts, function(err, tx) {
-          should.exist(err);
-          err.message.should.equal('dummy exception');
-          bitcoreStub.restore();
-          done();
-        });
-      });
-    });
-
-    it('should create tx when there is a pending tx and enough UTXOs', function(done) {
-      helpers.stubUtxos(server, wallet, [10.1, 10.2, 10.3], function() {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 12, TestData.copayers[0].privKey_1H_0);
-        server.createTx(txOpts, function(err, tx) {
-          should.not.exist(err);
-          should.exist(tx);
-          var txOpts2 = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 8, TestData.copayers[0].privKey_1H_0);
-          server.createTx(txOpts2, function(err, tx) {
+      it('should be able to send max amount', function(done) {
+        helpers.stubUtxos(server, wallet, _.range(1, 10, 0), function() {
+          server.getBalance({}, function(err, balance) {
             should.not.exist(err);
-            should.exist(tx);
-            server.getPendingTxs({}, function(err, txs) {
+            balance.totalAmount.should.equal(helpers.toSatoshi(9));
+            balance.lockedAmount.should.equal(0);
+            balance.availableAmount.should.equal(helpers.toSatoshi(9));
+            balance.totalBytesToSendMax.should.equal(2896);
+            balance.totalBytesToSendConfirmedMax.should.equal(2896);
+            var fee = parseInt((balance.totalBytesToSendMax * 10000 / 1000).toFixed(0));
+            var max = balance.availableAmount - fee;
+            var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', max / 1e8, TestData.copayers[0].privKey_1H_0);
+            server.createTxLegacy(txOpts, function(err, tx) {
               should.not.exist(err);
-              txs.length.should.equal(2);
+              should.exist(tx);
+              tx.amount.should.equal(max);
+              var estimatedFee = 2896 * 10000 / 1000;
+              tx.fee.should.be.within(0.9 * estimatedFee, 1.1 * estimatedFee);
               server.getBalance({}, function(err, balance) {
                 should.not.exist(err);
-                balance.totalAmount.should.equal(3060000000);
-                balance.lockedAmount.should.equal(3060000000);
+                balance.lockedAmount.should.equal(helpers.toSatoshi(9));
+                balance.availableAmount.should.equal(0);
                 done();
               });
             });
           });
         });
       });
-    });
 
-    it('should fail to create tx when there is a pending tx and not enough UTXOs', function(done) {
-      helpers.stubUtxos(server, wallet, [10.1, 10.2, 10.3], function() {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 12, TestData.copayers[0].privKey_1H_0);
-        server.createTx(txOpts, function(err, tx) {
-          should.not.exist(err);
-          should.exist(tx);
-          var txOpts2 = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 24, TestData.copayers[0].privKey_1H_0);
-          server.createTx(txOpts2, function(err, tx) {
-            err.code.should.equal('LOCKED_FUNDS');
-            should.not.exist(tx);
-            server.getPendingTxs({}, function(err, txs) {
-              should.not.exist(err);
-              txs.length.should.equal(1);
-              server.getBalance({}, function(err, balance) {
-                should.not.exist(err);
-                balance.totalAmount.should.equal(helpers.toSatoshi(30.6));
-                var amountInputs = _.sum(txs[0].inputs, 'satoshis');
-                balance.lockedAmount.should.equal(amountInputs);
-                balance.lockedAmount.should.be.below(balance.totalAmount);
-                balance.availableAmount.should.equal(balance.totalAmount - balance.lockedAmount);
-                done();
-              });
-            });
-          });
-        });
-      });
-    });
-
-    it('should create tx using different UTXOs for simultaneous requests', function(done) {
-      var N = 5;
-      helpers.stubUtxos(server, wallet, _.range(100, 100 + N, 0), function(utxos) {
-        server.getBalance({}, function(err, balance) {
-          should.not.exist(err);
-          balance.totalAmount.should.equal(helpers.toSatoshi(N * 100));
-          balance.lockedAmount.should.equal(0);
-          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, TestData.copayers[0].privKey_1H_0);
-          async.map(_.range(N), function(i, cb) {
-            server.createTx(txOpts, function(err, tx) {
-              cb(err, tx);
-            });
-          }, function(err) {
-            server.getPendingTxs({}, function(err, txs) {
-              should.not.exist(err);
-              txs.length.should.equal(N);
-              _.uniq(_.pluck(txs, 'changeAddress')).length.should.equal(N);
-              server.getBalance({}, function(err, balance) {
-                should.not.exist(err);
-                balance.totalAmount.should.equal(helpers.toSatoshi(N * 100));
-                balance.lockedAmount.should.equal(balance.totalAmount);
-                done();
-              });
-            });
-          });
-        });
-      });
-    });
-
-    it('should create tx for type multiple_outputs', function(done) {
-      helpers.stubUtxos(server, wallet, [100, 200], function() {
-        var outputs = [{
-          toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
-          amount: 75,
-          message: 'message #1'
-        }, {
-          toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
-          amount: 75,
-          message: 'message #2'
-        }];
-        var txOpts = helpers.createProposalOpts(Model.TxProposal.Types.MULTIPLEOUTPUTS, outputs, TestData.copayers[0].privKey_1H_0, {
-          message: 'some message'
-        });
-        server.createTx(txOpts, function(err, tx) {
-          should.not.exist(err);
-          should.exist(tx);
-          done();
-        });
-      });
-    });
-
-    it('should support creating a multiple output tx with no change address', function(done) {
-      helpers.stubUtxos(server, wallet, [1, 2], function() {
-        var max = 3 - (7560 / 1e8); // Fees for this tx at 100bits/kB = 7560 sat
-        var outputs = [{
-          toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
-          amount: 1,
-          message: 'message #1'
-        }, {
-          toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
-          amount: max - 1,
-          message: 'message #2'
-        }];
-        var txOpts = helpers.createProposalOpts(Model.TxProposal.Types.MULTIPLEOUTPUTS, outputs, TestData.copayers[0].privKey_1H_0, {
-          message: 'some message'
-        });
-        server.createTx(txOpts, function(err, txp) {
-          should.not.exist(err);
-          should.exist(txp);
-
-          var t = txp.getBitcoreTx().toObject();
-          t.outputs.length.should.equal(2);
-          _.sum(t.outputs, 'satoshis').should.equal(max * 1e8);
-          done();
-        });
-      });
-    });
-
-
-    it('should fail to create tx for type multiple_outputs with missing output argument', function(done) {
-      helpers.stubUtxos(server, wallet, [100, 200], function() {
-        var outputs = [{
-          amount: 80,
-          message: 'message #1',
-        }, {
-          toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
-          amount: 90,
-          message: 'message #2'
-        }];
-        var txOpts = helpers.createProposalOpts(Model.TxProposal.Types.MULTIPLEOUTPUTS, outputs, TestData.copayers[0].privKey_1H_0, {
-          message: 'some message'
-        });
-        server.createTx(txOpts, function(err, tx) {
-          should.exist(err);
-          err.message.should.contain('outputs argument missing');
-          done();
-        });
-      });
-    });
-
-    it('should fail to create tx for unsupported proposal type', function(done) {
-      helpers.stubUtxos(server, wallet, [100, 200], function() {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, TestData.copayers[0].privKey_1H_0, {
-          message: 'some message'
-        });
-        txOpts.type = 'bogus';
-        server.createTx(txOpts, function(err, tx) {
-          should.exist(err);
-          err.message.should.contain('Invalid proposal type');
-          done();
-        });
-      });
-    });
-
-    it('should be able to create tx with inputs argument', function(done) {
-      helpers.stubUtxos(server, wallet, [1, 3, 2], function(utxos) {
-        server._getUtxosForCurrentWallet(function(err, utxos) {
-          should.not.exist(err);
-          var inputs = [utxos[0], utxos[2]];
-          var txOpts = helpers.createExternalProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 2.5,
-            TestData.copayers[0].privKey_1H_0, inputs);
-          server.createTx(txOpts, function(err, tx) {
+      it('should be able to send max non-locked amount', function(done) {
+        helpers.stubUtxos(server, wallet, _.range(1, 10, 0), function() {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 3.5, TestData.copayers[0].privKey_1H_0);
+          server.createTxLegacy(txOpts, function(err, tx) {
             should.not.exist(err);
-            should.exist(tx);
-            tx.inputs.length.should.equal(2);
-            var txids = _.pluck(tx.inputs, 'txid');
-            txids.should.contain(utxos[0].txid);
-            txids.should.contain(utxos[2].txid);
+            server.getBalance({}, function(err, balance) {
+              should.not.exist(err);
+              balance.totalAmount.should.equal(helpers.toSatoshi(9));
+              balance.lockedAmount.should.equal(helpers.toSatoshi(4));
+              balance.availableAmount.should.equal(helpers.toSatoshi(5));
+              balance.totalBytesToSendMax.should.equal(1653);
+              balance.totalBytesToSendConfirmedMax.should.equal(1653);
+              var fee = parseInt((balance.totalBytesToSendMax * 2000 / 1000).toFixed(0));
+              var max = balance.availableAmount - fee;
+              var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', max / 1e8, TestData.copayers[0].privKey_1H_0, {
+                feePerKb: 2000
+              });
+              server.createTxLegacy(txOpts, function(err, tx) {
+                should.not.exist(err);
+                should.exist(tx);
+                tx.amount.should.equal(max);
+                var estimatedFee = 1653 * 2000 / 1000;
+                tx.fee.should.be.within(0.9 * estimatedFee, 1.1 * estimatedFee);
+                server.getBalance({}, function(err, balance) {
+                  should.not.exist(err);
+                  balance.lockedAmount.should.equal(helpers.toSatoshi(9));
+                  done();
+                });
+              });
+            });
+          });
+        });
+      });
+
+      it('should be able to send max confirmed', function(done) {
+        helpers.stubUtxos(server, wallet, [1, 1, 'u1', 'u1'], function() {
+          server.getBalance({}, function(err, balance) {
+            should.not.exist(err);
+            balance.totalAmount.should.equal(helpers.toSatoshi(4));
+            balance.totalConfirmedAmount.should.equal(helpers.toSatoshi(2));
+            balance.lockedAmount.should.equal(0);
+            balance.availableAmount.should.equal(helpers.toSatoshi(4));
+            balance.availableConfirmedAmount.should.equal(helpers.toSatoshi(2));
+            balance.totalBytesToSendMax.should.equal(1342);
+            balance.totalBytesToSendConfirmedMax.should.equal(720);
+            var fee = parseInt((balance.totalBytesToSendConfirmedMax * 10000 / 1000).toFixed(0));
+            var max = balance.availableConfirmedAmount - fee;
+            var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', max / 1e8, TestData.copayers[0].privKey_1H_0);
+            server.createTxLegacy(txOpts, function(err, tx) {
+              should.not.exist(err);
+              should.exist(tx);
+              tx.amount.should.equal(max);
+              var estimatedFee = 720 * 10000 / 1000;
+              tx.fee.should.be.within(0.9 * estimatedFee, 1.1 * estimatedFee);
+              server.getBalance({}, function(err, balance) {
+                should.not.exist(err);
+                balance.lockedAmount.should.equal(helpers.toSatoshi(2));
+                balance.availableConfirmedAmount.should.equal(0);
+                balance.availableAmount.should.equal(helpers.toSatoshi(2));
+                done();
+              });
+            });
+          });
+        });
+      });
+
+      it('should not use UTXO provided in utxosToExclude option', function(done) {
+        helpers.stubUtxos(server, wallet, [1, 2, 3], function(utxos) {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 4.5, TestData.copayers[0].privKey_1H_0);
+          txOpts.utxosToExclude = [utxos[1].txid + ':' + utxos[1].vout];
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.exist(err);
+            err.code.should.equal('INSUFFICIENT_FUNDS');
+            err.message.should.equal('Insufficient funds');
+            done();
+          });
+        });
+      });
+
+      it('should use non-excluded UTXOs', function(done) {
+        helpers.stubUtxos(server, wallet, [1, 2], function(utxos) {
+          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.5, TestData.copayers[0].privKey_1H_0);
+          txOpts.utxosToExclude = [utxos[0].txid + ':' + utxos[0].vout];
+          server.createTxLegacy(txOpts, function(err, tx) {
+            should.not.exist(err);
+            tx.inputs.length.should.equal(1);
+            tx.inputs[0].txid.should.equal(utxos[1].txid);
+            tx.inputs[0].vout.should.equal(utxos[1].vout);
             done();
           });
         });
       });
     });
 
-    it('should be able to send max amount', function(done) {
-      helpers.stubUtxos(server, wallet, _.range(1, 10, 0), function() {
-        server.getBalance({}, function(err, balance) {
-          should.not.exist(err);
-          balance.totalAmount.should.equal(helpers.toSatoshi(9));
-          balance.lockedAmount.should.equal(0);
-          balance.availableAmount.should.equal(helpers.toSatoshi(9));
-          balance.totalBytesToSendMax.should.equal(2896);
-          var fee = parseInt((balance.totalBytesToSendMax * 10000 / 1000).toFixed(0));
-          var max = balance.availableAmount - fee;
-          var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', max / 1e8, TestData.copayers[0].privKey_1H_0);
+    describe('New', function() {
+      var server, wallet;
+      beforeEach(function(done) {
+        helpers.createAndJoinWallet(2, 3, function(s, w) {
+          server = s;
+          wallet = w;
+          done();
+        });
+      });
+
+      it('should create a tx', function(done) {
+        helpers.stubUtxos(server, wallet, [1, 2], function() {
+          var txOpts = helpers.createProposalOpts2([{
+            toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
+            amount: 0.8
+          }], {
+            message: 'some message',
+            customData: 'some custom data',
+          });
           server.createTx(txOpts, function(err, tx) {
             should.not.exist(err);
             should.exist(tx);
-            tx.amount.should.equal(max);
-            var estimatedFee = 2896 * 10000 / 1000;
-            tx.fee.should.be.within(0.9 * estimatedFee, 1.1 * estimatedFee);
-            server.getBalance({}, function(err, balance) {
+            tx.walletM.should.equal(2);
+            tx.walletN.should.equal(3);
+            tx.requiredRejections.should.equal(2);
+            tx.requiredSignatures.should.equal(2);
+            tx.isAccepted().should.equal.false;
+            tx.isRejected().should.equal.false;
+            tx.isPending().should.equal.true;
+            tx.isTemporary().should.equal.true;
+            tx.amount.should.equal(helpers.toSatoshi(0.8));
+            server.getPendingTxs({}, function(err, txs) {
               should.not.exist(err);
-              balance.lockedAmount.should.equal(helpers.toSatoshi(9));
-              balance.availableAmount.should.equal(0);
+              txs.should.be.empty;
               done();
             });
           });
         });
       });
-    });
-    it('should be able to send max non-locked amount', function(done) {
-      helpers.stubUtxos(server, wallet, _.range(1, 10, 0), function() {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 3.5, TestData.copayers[0].privKey_1H_0);
-        server.createTx(txOpts, function(err, tx) {
-          should.not.exist(err);
-          server.getBalance({}, function(err, balance) {
+
+      it('should be able to send a temporary tx proposal', function(done) {
+        helpers.stubUtxos(server, wallet, [1, 2], function() {
+          var txOpts = helpers.createProposalOpts2([{
+            toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
+            amount: 0.8
+          }], {
+            message: 'some message',
+            customData: 'some custom data',
+          });
+          server.createTx(txOpts, function(err, txp) {
             should.not.exist(err);
-            balance.totalAmount.should.equal(helpers.toSatoshi(9));
-            balance.lockedAmount.should.equal(helpers.toSatoshi(4));
-            balance.availableAmount.should.equal(helpers.toSatoshi(5));
-            balance.totalBytesToSendMax.should.equal(1653);
-            var fee = parseInt((balance.totalBytesToSendMax * 2000 / 1000).toFixed(0));
-            var max = balance.availableAmount - fee;
-            var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', max / 1e8, TestData.copayers[0].privKey_1H_0, {
-              feePerKb: 2000
-            });
-            server.createTx(txOpts, function(err, tx) {
+            should.exist(txp);
+            var publishOpts = helpers.getProposalSignatureOpts(txp, TestData.copayers[0].privKey_1H_0);
+            server.publishTx(publishOpts, function(err) {
               should.not.exist(err);
-              should.exist(tx);
-              tx.amount.should.equal(max);
-              var estimatedFee = 1653 * 2000 / 1000;
-              tx.fee.should.be.within(0.9 * estimatedFee, 1.1 * estimatedFee);
-              server.getBalance({}, function(err, balance) {
+              server.getPendingTxs({}, function(err, txs) {
                 should.not.exist(err);
-                balance.lockedAmount.should.equal(helpers.toSatoshi(9));
+                txs.length.should.equal(1);
                 done();
               });
             });
           });
         });
       });
-    });
-    it('should not use UTXO provided in utxosToExclude option', function(done) {
-      helpers.stubUtxos(server, wallet, [1, 2, 3], function(utxos) {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 4.5, TestData.copayers[0].privKey_1H_0);
-        txOpts.utxosToExclude = [utxos[1].txid + ':' + utxos[1].vout];
-        server.createTx(txOpts, function(err, tx) {
+
+      it('should fail to send non-existent tx proposal', function(done) {
+        server.publishTx({
+          txProposalId: 'wrong-id',
+          proposalSignature: 'dummy',
+        }, function(err) {
           should.exist(err);
-          err.code.should.equal('INSUFFICIENT_FUNDS');
-          err.message.should.equal('Insufficient funds');
-          done();
+          server.getPendingTxs({}, function(err, txs) {
+            should.not.exist(err);
+            txs.should.be.empty;
+            done();
+          });
         });
       });
-    });
-    it('should use non-excluded UTXOs', function(done) {
-      helpers.stubUtxos(server, wallet, [1, 2], function(utxos) {
-        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.5, TestData.copayers[0].privKey_1H_0);
-        txOpts.utxosToExclude = [utxos[0].txid + ':' + utxos[0].vout];
-        server.createTx(txOpts, function(err, tx) {
+
+      it('should fail to send tx proposal with wrong signature', function(done) {
+        helpers.stubUtxos(server, wallet, [1, 2], function() {
+          var txOpts = helpers.createProposalOpts2([{
+            toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
+            amount: 0.8
+          }], {
+            message: 'some message',
+          });
+          server.createTx(txOpts, function(err, txp) {
+            should.not.exist(err);
+            should.exist(txp);
+            server.publishTx({
+              txProposalId: txp.id,
+              proposalSignature: 'dummy'
+            }, function(err) {
+              should.exist(err);
+              err.message.should.contain('Invalid proposal signature');
+              done();
+            });
+          });
+        });
+      });
+
+      it('should fail to send tx proposal not signed by the creator', function(done) {
+        helpers.stubUtxos(server, wallet, [1, 2], function() {
+          var txOpts = helpers.createProposalOpts2([{
+            toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
+            amount: 0.8
+          }], {
+            message: 'some message',
+          });
+          server.createTx(txOpts, function(err, txp) {
+            should.not.exist(err);
+            should.exist(txp);
+
+            var raw = txp.getRawTx();
+            var proposalSignature = helpers.signMessage(raw, TestData.copayers[0].privKey_1H_0);
+            var pubKey = new Bitcore.PrivateKey(TestData.copayers[0].privKey_1H_0).toPublicKey().toString();
+            var pubKeySig = helpers.signMessage(pubKey, TestData.copayers[1].privKey_1H_0);
+
+            var publishOpts = {
+              txProposalId: txp.id,
+              proposalSignature: proposalSignature,
+              proposalSignaturePubKey: pubKey,
+              proposalSignaturePubKeySig: pubKeySig,
+            }
+
+            server.publishTx(publishOpts, function(err) {
+              should.exist(err);
+              err.message.should.contain('Invalid proposal signing key');
+              done();
+            });
+          });
+        });
+      });
+
+      it('should accept a tx proposal signed with a custom key', function(done) {
+        var reqPrivKey = new Bitcore.PrivateKey();
+        var reqPubKey = reqPrivKey.toPublicKey();
+
+        var xPrivKey = TestData.copayers[0].xPrivKey_44H_0H_0H;
+        var sig = helpers.signRequestPubKey(reqPubKey, xPrivKey);
+
+        var opts = {
+          copayerId: TestData.copayers[0].id44,
+          requestPubKey: reqPubKey,
+          signature: sig,
+        };
+
+        server.addAccess(opts, function(err) {
           should.not.exist(err);
-          tx.inputs.length.should.equal(1);
-          tx.inputs[0].txid.should.equal(utxos[1].txid);
-          tx.inputs[0].vout.should.equal(utxos[1].vout);
+
+          helpers.stubUtxos(server, wallet, [1, 2], function() {
+            var txOpts = helpers.createProposalOpts2([{
+              toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
+              amount: 0.8
+            }], {
+              message: 'some message',
+            });
+            server.createTx(txOpts, function(err, txp) {
+              should.not.exist(err);
+              should.exist(txp);
+
+              var publishOpts = {
+                txProposalId: txp.id,
+                proposalSignature: helpers.signMessage(txp.getRawTx(), reqPrivKey),
+                proposalSignaturePubKey: reqPubKey,
+                proposalSignaturePubKeySig: sig,
+              }
+
+              server.publishTx(publishOpts, function(err) {
+                should.exist(err);
+                err.message.should.contain('Invalid proposal signing key');
+                done();
+              });
+            });
+          });
+        });
+      });
+
+      it('should fail to send a temporary tx proposal if utxos are unavailable', function(done) {
+        var txp1, txp2;
+        var txOpts = helpers.createProposalOpts2([{
+          toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
+          amount: 0.8
+        }], {
+          message: 'some message',
+        });
+
+        async.waterfall([
+
+          function(next) {
+            helpers.stubUtxos(server, wallet, [1, 2], function() {
+              next();
+            });
+          },
+          function(next) {
+            server.createTx(txOpts, next);
+          },
+          function(txp, next) {
+            txp1 = txp;
+            server.createTx(txOpts, next);
+          },
+          function(txp, next) {
+            txp2 = txp;
+            should.exist(txp1);
+            should.exist(txp2);
+            var publishOpts = helpers.getProposalSignatureOpts(txp1, TestData.copayers[0].privKey_1H_0);
+            server.publishTx(publishOpts, next);
+          },
+          function(next) {
+            var publishOpts = helpers.getProposalSignatureOpts(txp2, TestData.copayers[0].privKey_1H_0);
+            server.publishTx(publishOpts, function(err) {
+              should.exist(err);
+              err.code.should.equal('UNAVAILABLE_UTXOS');
+              next();
+            });
+          },
+          function(next) {
+            server.getPendingTxs({}, function(err, txs) {
+              should.not.exist(err);
+              txs.length.should.equal(1);
+              next();
+            });
+          },
+          function(next) {
+            // A new tx proposal should use the next available UTXO
+            server.createTx(txOpts, next);
+          },
+          function(txp3, next) {
+            should.exist(txp3);
+            var publishOpts = helpers.getProposalSignatureOpts(txp3, TestData.copayers[0].privKey_1H_0);
+            server.publishTx(publishOpts, next);
+          },
+          function(next) {
+            server.getPendingTxs({}, function(err, txs) {
+              should.not.exist(err);
+              txs.length.should.equal(2);
+              next();
+            });
+          },
+        ], function(err) {
+          should.not.exist(err);
           done();
         });
       });
+
+      it('should fail to list pending proposals from legacy client', function(done) {
+        helpers.stubUtxos(server, wallet, [1, 2], function() {
+          var txOpts = helpers.createProposalOpts2([{
+            toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
+            amount: 0.8
+          }], {
+            message: 'some message',
+            customData: 'some custom data',
+          });
+          server.createTx(txOpts, function(err, txp) {
+            should.not.exist(err);
+            should.exist(txp);
+            var publishOpts = helpers.getProposalSignatureOpts(txp, TestData.copayers[0].privKey_1H_0);
+            server.publishTx(publishOpts, function(err) {
+              should.not.exist(err);
+              server.getPendingTxs({}, function(err, txs) {
+                should.not.exist(err);
+                txs.length.should.equal(1);
+
+                server._setClientVersion('bwc-1.1.8');
+                server.getPendingTxs({}, function(err, txs) {
+                  should.exist(err);
+                  err.code.should.equal('UPGRADE_NEEDED');
+                  done();
+                });
+              });
+            });
+          });
+        });
+      });
+
     });
   });
 
@@ -2349,7 +2980,7 @@ describe('Wallet service', function() {
         function(next) {
           async.each(_.range(3), function(i, next) {
               var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, TestData.copayers[0].privKey_1H_0);
-              server.createTx(txOpts, function(err, tx) {
+              server.createTxLegacy(txOpts, function(err, tx) {
                 should.not.exist(err);
                 server.rejectTx({
                   txProposalId: tx.id,
@@ -2362,7 +2993,7 @@ describe('Wallet service', function() {
         function(next) {
           // Allow a 4th tx
           var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, TestData.copayers[0].privKey_1H_0);
-          server.createTx(txOpts, function(err, tx) {
+          server.createTxLegacy(txOpts, function(err, tx) {
             server.rejectTx({
               txProposalId: tx.id,
               reason: 'some reason',
@@ -2372,7 +3003,7 @@ describe('Wallet service', function() {
         function(next) {
           // Do not allow before backoff time
           var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, TestData.copayers[0].privKey_1H_0);
-          server.createTx(txOpts, function(err, tx) {
+          server.createTxLegacy(txOpts, function(err, tx) {
             should.exist(err);
             err.code.should.equal('TX_CANNOT_CREATE');
             next();
@@ -2381,7 +3012,7 @@ describe('Wallet service', function() {
         function(next) {
           var clock = sinon.useFakeTimers(Date.now() + (Defaults.BACKOFF_TIME + 2) * 60 * 1000, 'Date');
           var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, TestData.copayers[0].privKey_1H_0);
-          server.createTx(txOpts, function(err, tx) {
+          server.createTxLegacy(txOpts, function(err, tx) {
             clock.restore();
             server.rejectTx({
               txProposalId: tx.id,
@@ -2393,7 +3024,7 @@ describe('Wallet service', function() {
           // Do not allow a 5th tx before backoff time
           var clock = sinon.useFakeTimers(Date.now() + (Defaults.BACKOFF_TIME + 2) * 60 * 1000 + 1, 'Date');
           var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 1, TestData.copayers[0].privKey_1H_0);
-          server.createTx(txOpts, function(err, tx) {
+          server.createTxLegacy(txOpts, function(err, tx) {
             clock.restore();
             should.exist(err);
             err.code.should.equal('TX_CANNOT_CREATE');
@@ -2416,7 +3047,7 @@ describe('Wallet service', function() {
         wallet = w;
         helpers.stubUtxos(server, wallet, _.range(1, 9), function() {
           var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 10, TestData.copayers[0].privKey_1H_0);
-          server.createTx(txOpts, function(err, tx) {
+          server.createTxLegacy(txOpts, function(err, tx) {
             should.not.exist(err);
             should.exist(tx);
             txid = tx.id;
@@ -2507,7 +3138,7 @@ describe('Wallet service', function() {
           wallet = w;
           helpers.stubUtxos(server, wallet, [1, 2], function() {
             var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 2.5, TestData.copayers[0].privKey_1H_0);
-            server.createTx(txOpts, function(err, tx) {
+            server.createTxLegacy(txOpts, function(err, tx) {
               should.not.exist(err);
               should.exist(tx);
               tx.addressType.should.equal('P2PKH');
@@ -2556,7 +3187,7 @@ describe('Wallet service', function() {
           wallet = w;
           helpers.stubUtxos(server, wallet, _.range(1, 9), function() {
             var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 20, TestData.copayers[0].privKey_1H_0);
-            server.createTx(txOpts, function(err, tx) {
+            server.createTxLegacy(txOpts, function(err, tx) {
               should.not.exist(err);
               should.exist(tx);
               txid = tx.id;
@@ -2764,7 +3395,7 @@ describe('Wallet service', function() {
           var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 9, TestData.copayers[0].privKey_1H_0, {
             message: 'some message'
           });
-          server.createTx(txOpts, function(err, txp) {
+          server.createTxLegacy(txOpts, function(err, txp) {
             should.not.exist(err);
             should.exist(txp);
             var signatures = helpers.clientSign(txp, TestData.copayers[0].xPrivKey_44H_0H_0H);
@@ -2855,7 +3486,7 @@ describe('Wallet service', function() {
       var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 9, TestData.copayers[0].privKey_1H_0, {
         message: 'some message 2'
       });
-      server.createTx(txOpts, function(err, txp) {
+      server.createTxLegacy(txOpts, function(err, txp) {
         should.not.exist(err);
         server.getPendingTxs({}, function(err, txs) {
           should.not.exist(err);
@@ -2883,7 +3514,7 @@ describe('Wallet service', function() {
       var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 9, TestData.copayers[0].privKey_1H_0, {
         message: 'some message'
       });
-      server.createTx(txOpts, function(err, txp) {
+      server.createTxLegacy(txOpts, function(err, txp) {
         should.not.exist(err);
         should.exist(txp);
         server.broadcastTx({
@@ -2977,7 +3608,7 @@ describe('Wallet service', function() {
       var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 10, TestData.copayers[0].privKey_1H_0, {
         message: 'some message'
       });
-      server.createTx(txOpts, function(err, txp) {
+      server.createTxLegacy(txOpts, function(err, txp) {
         should.not.exist(err);
         should.exist(txp);
         helpers.getAuthServer(wallet.copayers[1].id, function(server2, wallet) {
@@ -3000,7 +3631,7 @@ describe('Wallet service', function() {
           var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 10, TestData.copayers[0].privKey_1H_0, {
             message: 'some message'
           });
-          server.createTx(txOpts, function(err, txp) {
+          server.createTxLegacy(txOpts, function(err, txp) {
             txpId = txp.id;
             should.not.exist(err);
             should.exist(txp);
@@ -3090,7 +3721,7 @@ describe('Wallet service', function() {
           var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 10, TestData.copayers[0].privKey_1H_0, {
             message: 'some message'
           });
-          server.createTx(txOpts, function(err, txp) {
+          server.createTxLegacy(txOpts, function(err, txp) {
             txpId = txp.id;
             should.not.exist(err);
             should.exist(txp);
@@ -3174,7 +3805,7 @@ describe('Wallet service', function() {
           var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 9, TestData.copayers[0].privKey_1H_0, {
             message: 'some message'
           });
-          server.createTx(txOpts, function(err, txp) {
+          server.createTxLegacy(txOpts, function(err, txp) {
             should.not.exist(err);
             should.exist(txp);
             txpid = txp.id;
@@ -3234,7 +3865,7 @@ describe('Wallet service', function() {
           var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.1, TestData.copayers[0].privKey_1H_0);
           async.eachSeries(_.range(10), function(i, next) {
             clock.tick(10 * 1000);
-            server.createTx(txOpts, function(err, tx) {
+            server.createTxLegacy(txOpts, function(err, tx) {
               should.not.exist(err);
               next();
             });
@@ -3321,7 +3952,7 @@ describe('Wallet service', function() {
           var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.01, TestData.copayers[0].privKey_1H_0);
           async.eachSeries(_.range(3), function(i, next) {
             clock.tick(25 * 1000);
-            server.createTx(txOpts, function(err, tx) {
+            server.createTxLegacy(txOpts, function(err, tx) {
               should.not.exist(err);
               next();
             });
@@ -3564,7 +4195,7 @@ describe('Wallet service', function() {
             amount: helpers.toSatoshi(0.1),
           };
           async.eachSeries(_.range(2), function(i, next) {
-            server.createTx(txOpts, function(err, tx) {
+            server.createTxLegacy(txOpts, function(err, tx) {
               next();
             });
           }, done);
@@ -3624,7 +4255,7 @@ describe('Wallet service', function() {
                 message: 'some message'
               });
               async.eachSeries(_.range(2), function(i, next) {
-                server2.createTx(txOpts, function(err, tx) {
+                server2.createTxLegacy(txOpts, function(err, tx) {
                   should.not.exist(err);
                   next(err);
                 });
@@ -3691,7 +4322,7 @@ describe('Wallet service', function() {
           var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, TestData.copayers[0].privKey_1H_0, {
             message: 'some message'
           });
-          server.createTx(txOpts, function(err, tx) {
+          server.createTxLegacy(txOpts, function(err, tx) {
             server.getPendingTxs({}, function(err, txs) {
               txp = txs[0];
               done();
@@ -4021,10 +4652,13 @@ describe('Wallet service', function() {
           amount: 30,
           message: 'message #2'
         }];
-        var txOpts = helpers.createProposalOpts(Model.TxProposal.Types.MULTIPLEOUTPUTS, outputs, TestData.copayers[0].privKey_1H_0, {
-          message: 'some message'
+        var txOpts = helpers.createProposalOpts(Model.TxProposalLegacy.Types.MULTIPLEOUTPUTS, outputs, TestData.copayers[0].privKey_1H_0, {
+          message: 'some message',
+          customData: {
+            "test": true
+          }
         });
-        server.createTx(txOpts, function(err, tx) {
+        server.createTxLegacy(txOpts, function(err, tx) {
           should.not.exist(err);
           should.exist(tx);
 
@@ -4074,7 +4708,7 @@ describe('Wallet service', function() {
                 tx.actions.length.should.equal(1);
                 tx.actions[0].type.should.equal('accept');
                 tx.actions[0].copayerName.should.equal('copayer 1');
-                tx.proposalType.should.equal(Model.TxProposal.Types.MULTIPLEOUTPUTS);
+                tx.proposalType.should.equal(Model.TxProposalLegacy.Types.MULTIPLEOUTPUTS);
                 tx.outputs[0].address.should.equal(external);
                 tx.outputs[0].amount.should.equal(helpers.toSatoshi(50));
                 should.not.exist(tx.outputs[0].message);
@@ -4084,6 +4718,8 @@ describe('Wallet service', function() {
                 tx.outputs[1].amount.should.equal(helpers.toSatoshi(30));
                 should.exist(tx.outputs[1].message);
                 tx.outputs[1].message.should.equal('message #2');
+                should.exist(tx.customData);
+                should.exist(tx.customData["test"]);
                 done();
               });
             });
@@ -4132,7 +4768,7 @@ describe('Wallet service', function() {
       }, {
         opts: {
           skip: 4,
-          limit: 20,
+          limit: 10,
         },
         expected: [10],
       }, {
@@ -4196,6 +4832,15 @@ describe('Wallet service', function() {
         done();
       });
     });
+    it('should handle exceeded limit', function(done) {
+      server.getTxHistory({
+        limit: 1000
+      }, function(err, txs) {
+        err.code.should.equal('HISTORY_LIMIT_EXCEEDED');
+        done();
+      });
+    });
+
   });
 
   describe('#scan', function() {
@@ -4613,7 +5258,7 @@ describe('Wallet service', function() {
             should.not.exist(err);
             should.exist(server);
             verifyStub.restore();
-            server.createTx(txOpts, function(err, tx) {
+            server.createTxLegacy(txOpts, function(err, tx) {
               should.not.exist(err);
               should.exist(tx);
               tx.amount.should.equal(helpers.toSatoshi(80));
@@ -4629,7 +5274,7 @@ describe('Wallet service', function() {
           var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, TestData.copayers[0].privKey_1H_0, {
             message: 'some message'
           });
-          server.createTx(txOpts, function(err, tx) {
+          server.createTxLegacy(txOpts, function(err, tx) {
             should.not.exist(err);
             should.exist(tx);
 
@@ -4658,7 +5303,7 @@ describe('Wallet service', function() {
           var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, TestData.copayers[0].privKey_1H_0, {
             message: 'some message'
           });
-          server.createTx(txOpts, function(err, tx) {
+          server.createTxLegacy(txOpts, function(err, tx) {
             should.not.exist(err);
             should.exist(tx);
             _.startsWith(tx.version, '1.').should.be.false;
@@ -4703,7 +5348,7 @@ describe('Wallet service', function() {
             should.not.exist(err);
             should.exist(server);
             verifyStub.restore();
-            server.createTx(txOpts, function(err, tx) {
+            server.createTxLegacy(txOpts, function(err, tx) {
               should.not.exist(err);
               should.exist(tx);
               tx.amount.should.equal(helpers.toSatoshi(80));
@@ -4737,13 +5382,13 @@ describe('Wallet service', function() {
             verifyStub.restore();
             var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.99995, TestData.copayers[0].privKey_1H_0);
 
-            server.createTx(txOpts, function(err, tx) {
+            server.createTxLegacy(txOpts, function(err, tx) {
               should.exist(err);
               err.code.should.equal('INSUFFICIENT_FUNDS_FOR_FEE');
               var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 0.99995, TestData.copayers[0].privKey_1H_0, {
                 feePerKb: 5000
               });
-              server.createTx(txOpts, function(err, tx) {
+              server.createTxLegacy(txOpts, function(err, tx) {
                 should.not.exist(err);
                 tx.fee.should.equal(5000);
 
@@ -4763,4 +5408,100 @@ describe('Wallet service', function() {
       });
     });
   });
+
+  describe('PayPro', function() {
+    var server, wallet;
+
+    beforeEach(function(done) {
+      helpers.createAndJoinWallet(1, 1, function(s, w) {
+        server = s;
+        wallet = w;
+        done();
+      });
+    });
+
+    it('should create a paypro tx', function(done) {
+      helpers.stubUtxos(server, wallet, [100, 200], function() {
+        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, TestData.copayers[0].privKey_1H_0, {
+          message: 'some message',
+          customData: 'some custom data',
+          payProUrl: 'http:/fakeurl.com',
+        });
+        server.createTxLegacy(txOpts, function(err, tx) {
+          should.not.exist(err);
+          should.exist(tx);
+          tx.payProUrl.should.equal('http:/fakeurl.com');
+          done();
+        });
+      });
+    });
+    it('should fail to create a paypro tx for a P2PKH wallet from an old client (bwc < 1.2.0)', function(done) {
+      helpers.stubUtxos(server, wallet, [100, 200], function() {
+        var txOpts = helpers.createSimpleProposalOpts('18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7', 80, TestData.copayers[0].privKey_1H_0, {
+          message: 'some message',
+          customData: 'some custom data',
+          payProUrl: 'http:/fakeurl.com',
+        });
+        server._setClientVersion('bwc-1.1.99');
+        server.createTxLegacy(txOpts, function(err, tx) {
+          should.exist(err);
+          should.not.exist(tx);
+          err.code.should.equal('UPGRADE_NEEDED');
+          done();
+        });
+      });
+    });
+  });
+
+  describe('Subscribe/unsubscribe', function() {
+    var server, wallet;
+    beforeEach(function(done) {
+      helpers.createAndJoinWallet(2, 3, function(s, w) {
+        server = s;
+        wallet = w;
+        done();
+      });
+    });
+
+    it('should subscribe copayer to push notifications service', function(done) {
+      request.yields();
+      helpers.getAuthServer(wallet.copayers[0].id, function(server) {
+        should.exist(server);
+        server.pushNotificationsSubscribe({
+          token: 'DEVICE_TOKEN'
+        }, function(err, response) {
+          should.not.exist(err);
+          var calls = request.getCalls();
+          calls.length.should.equal(1);
+          var args = _.map(calls, function(c) {
+            return c.args[0];
+          });
+          args[0].body.user.should.contain(wallet.copayers[0].id);
+          args[0].body.user.should.contain(wallet.id);
+          args[0].body.token.should.contain('DEVICE_TOKEN');
+          done();
+        });
+      });
+    });
+
+    it('should unsubscribe copayer to push notifications service', function(done) {
+      request.yields();
+      helpers.getAuthServer(wallet.copayers[0].id, function(server) {
+        should.exist(server);
+        server.pushNotificationsUnsubscribe(function(err, response) {
+          should.not.exist(err);
+          var calls = request.getCalls();
+          calls.length.should.equal(1);
+          var args = _.map(calls, function(c) {
+            return c.args[0];
+          });
+
+          args[0].body.user.should.contain(wallet.copayers[0].id);
+          args[0].body.user.should.contain(wallet.id);
+          done();
+        });
+      });
+    });
+  });
+
 });

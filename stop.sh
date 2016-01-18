@@ -11,8 +11,10 @@ stop_program ()
 }
 
 stop_program pids/bws.pid
+stop_program pids/fiatrateservice.pid
 stop_program pids/emailservice.pid
 stop_program pids/bcmonitor.pid
+stop_program pids/pushnotificationsservice.pid
 stop_program pids/messagebroker.pid
 stop_program pids/locker.pid
 
