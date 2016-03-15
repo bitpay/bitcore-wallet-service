@@ -43,6 +43,9 @@ var config = {
     testnet: {
       provider: 'insight',
       url: 'https://test-insight.bitpay.com:443',
+      // url: 'http://localhost:3001',
+      // Multiple servers (in priority order)
+      // url: ['http://a.b.c', 'https://test-insight.bitpay.com:443'],
     },
   },
   pushNotificationsOpts: {
@@ -54,7 +57,7 @@ var config = {
   },
   fiatRateServiceOpts: {
     defaultProvider: 'BitPay',
-    fetchInterval: 10, // in minutes
+    fetchInterval: 60, // in minutes
   },
   // To use email notifications uncomment this:
   // emailOpts: {

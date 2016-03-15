@@ -212,6 +212,40 @@ helpers.toSatoshi = function(btc) {
   }
 };
 
+helpers._parseAmount = function(str) {
+  var result = {
+    amount: +0,
+    confirmations: _.random(6, 100),
+  };
+
+  if (_.isNumber(str)) str = str.toString();
+
+  var re = /^((?:\d+c)|u)?\s*([\d\.]+)\s*(btc|bit|sat)?$/;
+  var match = str.match(re);
+
+  if (!match) throw new Error('Could not parse amount ' + str);
+
+  if (match[1]) {
+    if (match[1] == 'u') result.confirmations = 0;
+    if (_.endsWith(match[1], 'c')) result.confirmations = +match[1].slice(0, -1);
+  }
+
+  switch (match[3]) {
+    default:
+    case 'btc':
+      result.amount = Utils.strip(+match[2] * 1e8);
+      break;
+    case 'bit':
+      result.amount = Utils.strip(+match[2] * 1e2);
+      break
+    case 'sat':
+      result.amount = Utils.strip(+match[2]);
+      break;
+  };
+
+  return result;
+};
+
 helpers.stubUtxos = function(server, wallet, amounts, opts, cb) {
   if (_.isFunction(opts)) {
     cb = opts;
@@ -233,14 +267,9 @@ helpers.stubUtxos = function(server, wallet, amounts, opts, cb) {
       addresses.should.not.be.empty;
 
       var utxos = _.compact(_.map([].concat(amounts), function(amount, i) {
-        var confirmations;
-        if (_.isString(amount) && _.startsWith(amount, 'u')) {
-          amount = parseFloat(amount.substring(1));
-          confirmations = 0;
-        } else {
-          confirmations = Math.floor(Math.random() * 100 + 1);
-        }
-        if (amount <= 0) return null;
+        var parsed = helpers._parseAmount(amount);
+
+        if (parsed.amount <= 0) return null;
 
         var address = addresses[i % addresses.length];
 
@@ -257,11 +286,12 @@ helpers.stubUtxos = function(server, wallet, amounts, opts, cb) {
 
         return {
           txid: helpers.randomTXID(),
-          vout: Math.floor(Math.random() * 10 + 1),
-          satoshis: helpers.toSatoshi(amount),
+          vout: _.random(0, 10),
+          satoshis: parsed.amount,
           scriptPubKey: scriptPubKey.toBuffer().toString('hex'),
           address: address.address,
-          confirmations: confirmations
+          confirmations: parsed.confirmations,
+          publicKeys: address.publicKeys,
         };
       }));
 
@@ -271,7 +301,7 @@ helpers.stubUtxos = function(server, wallet, amounts, opts, cb) {
         helpers._utxos = utxos;
       }
 
-      blockchainExplorer.getUnspentUtxos = function(addresses, cb) {
+      blockchainExplorer.getUtxos = function(addresses, cb) {
         var selected = _.filter(helpers._utxos, function(utxo) {
           return _.contains(addresses, utxo.address);
         });
@@ -400,28 +430,6 @@ helpers.createExternalProposalOpts = function(toAddress, amount, signingKey, mor
 };
 
 
-helpers.createProposalOpts2 = function(outputs, moreOpts, inputs) {
-  _.each(outputs, function(output) {
-    output.amount = helpers.toSatoshi(output.amount);
-  });
-
-  var opts = {
-    outputs: outputs,
-    inputs: inputs || [],
-  };
-
-  if (moreOpts) {
-    moreOpts = _.pick(moreOpts, ['feePerKb', 'customData', 'message']);
-    opts = _.assign(opts, moreOpts);
-  }
-
-  opts = _.defaults(opts, {
-    message: null
-  });
-
-  return opts;
-};
-
 helpers.getProposalSignatureOpts = function(txp, signingKey) {
   var raw = txp.getRawTx();
   var proposalSignature = helpers.signMessage(raw, signingKey);
@@ -487,6 +495,17 @@ helpers.createAddresses = function(server, wallet, main, change, cb) {
     should.not.exist(err);
     // clock.restore();
     return cb(_.take(addresses, main), _.takeRight(addresses, change));
+  });
+};
+
+helpers.createAndPublishTx = function(server, txOpts, signingKey, cb) {
+  server.createTx(txOpts, function(err, txp) {
+    should.not.exist(err);
+    var publishOpts = helpers.getProposalSignatureOpts(txp, signingKey);
+    server.publishTx(publishOpts, function(err) {
+      should.not.exist(err);
+      return cb(txp);
+    });
   });
 };
 
