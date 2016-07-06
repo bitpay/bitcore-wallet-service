@@ -1705,16 +1705,16 @@ describe('Wallet service', function() {
         stub.withArgs(utxos[1].txid).callsArgWith(1, null, {
           confirmations: 0,
           vin: [{
-            txid: 111,
+            txid: '111',
             sequence: 0xffffffff,
           }, {
-            txid: 222,
+            txid: '222',
             sequence: 0xffffffff,
           }],
-        }).withArgs(111).callsArgWith(1, null, {
+        }).withArgs('111').callsArgWith(1, null, {
           confirmations: 0,
           vin: [],
-        }).withArgs(222).callsArgWith(1, null, {
+        }).withArgs('222').callsArgWith(1, null, {
           confirmations: 6,
           vin: [],
         });
@@ -1750,10 +1750,10 @@ describe('Wallet service', function() {
         stub.withArgs(utxos[1].txid).callsArgWith(1, null, {
           confirmations: 0,
           vin: [{
-            txid: 111,
+            txid: '111',
             sequence: 0xffffffff,
           }, {
-            txid: 222,
+            txid: '222',
             sequence: 0,
           }],
         });
@@ -1771,6 +1771,84 @@ describe('Wallet service', function() {
           balance.totalAmount.should.equal(helpers.toSatoshi(5));
           balance.totalUnsafeAmount.should.equal(helpers.toSatoshi(2));
           done();
+        });
+      });
+    });
+    it('should report safe if parent tx belongs to wallet', function(done) {
+      helpers.stubUtxos(server, wallet, [1, 'u2', 3], function(utxos) {
+        var stub = sinon.stub();
+        stub.withArgs(utxos[1].txid).callsArgWith(1, null, {
+          confirmations: 0,
+          vin: [{
+            txid: '111',
+            sequence: 0xffffffff,
+          }, {
+            txid: '222',
+            sequence: 0xffffffff,
+          }],
+        }).withArgs('111').callsArgWith(1, null, {
+          confirmations: 0,
+          vin: [],
+        }).withArgs('222').callsArgWith(1, null, {
+          confirmations: 0,
+          vin: [],
+        });
+
+        blockchainExplorer.getTransaction = stub;
+
+        var txp = Model.TxProposal.fromObj({
+          version: 3,
+          id: 1,
+          walletId: wallet.id,
+          creatorId: server.copayerId,
+          txid: utxos[1].txid,
+          status: 'broadcasted'
+        });
+        server.storage.storeTx(wallet.id, txp, function(err) {
+          should.not.exist(err);
+          server.getBalance({}, function(err, balance) {
+            should.not.exist(err);
+            should.exist(balance);
+            balance.totalAmount.should.equal(helpers.toSatoshi(6));
+            balance.totalUnsafeAmount.should.equal(helpers.toSatoshi(0));
+            done();
+          });
+        });
+      });
+    });
+    it('should not report safe if grand-parent tx belongs to wallet but parent tx does not', function(done) {
+      helpers.stubUtxos(server, wallet, [1, 'u2', 3], function(utxos) {
+        var stub = sinon.stub();
+        stub.withArgs(utxos[1].txid).callsArgWith(1, null, {
+          confirmations: 0,
+          vin: [{
+            txid: '111',
+            sequence: 0xffffffff,
+          }],
+        }).withArgs('111').callsArgWith(1, null, {
+          confirmations: 0,
+          vin: [],
+        });
+
+        blockchainExplorer.getTransaction = stub;
+
+        var txp = Model.TxProposal.fromObj({
+          version: 3,
+          id: 1,
+          walletId: wallet.id,
+          creatorId: server.copayerId,
+          txid: '111',
+          status: 'broadcasted'
+        });
+        server.storage.storeTx(wallet.id, txp, function(err) {
+          should.not.exist(err);
+          server.getBalance({}, function(err, balance) {
+            should.not.exist(err);
+            should.exist(balance);
+            balance.totalAmount.should.equal(helpers.toSatoshi(4));
+            balance.totalUnsafeAmount.should.equal(helpers.toSatoshi(2));
+            done();
+          });
         });
       });
     });

@@ -174,13 +174,27 @@ describe('Storage', function() {
       });
     });
     it('should fetch tx by hash', function(done) {
-      storage.fetchTxByHash('txid0', function(err, tx) {
+      storage.fetchTxByHash(null, 'txid0', function(err, tx) {
         should.not.exist(err);
         should.exist(tx);
         tx.id.should.equal(proposals[0].id);
         tx.walletId.should.equal(proposals[0].walletId);
         tx.creatorName.should.equal('copayer 0');
         done();
+      });
+    });
+    it('should fetch tx by hash and walletId', function(done) {
+      storage.fetchTxByHash('456', 'txid0', function(err, tx) {
+        should.not.exist(err);
+        should.not.exist(tx);
+        storage.fetchTxByHash('123', 'txid0', function(err, tx) {
+          should.not.exist(err);
+          should.exist(tx);
+          tx.id.should.equal(proposals[0].id);
+          tx.walletId.should.equal(proposals[0].walletId);
+          tx.creatorName.should.equal('copayer 0');
+          done();
+        });
       });
     });
 
