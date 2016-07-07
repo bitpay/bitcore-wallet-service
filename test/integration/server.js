@@ -3546,26 +3546,43 @@ describe('Wallet service', function() {
           });
         });
       });
-      it.skip('should exclude differentiate safe/unsafe utxos', function(done) {
-        helpers.stubUtxos(server, wallet, [1.3, 'u2', 'u0.1', 1.2], function(utxos) {
+      it('should exclude unsafe utxos', function(done) {
+        helpers.stubUtxos(server, wallet, [3, 'u1', 'u1', 1], function(utxos) {
+          var stub = sinon.stub();
+          stub.withArgs(utxos[1].txid).callsArgWith(1, null, {
+            confirmations: 0,
+            vin: [{
+              txid: '111',
+              sequence: 0xffffffff,
+            }],
+          }).withArgs('111').callsArgWith(1, null, {
+            confirmations: 0,
+            vin: [],
+          });
+
+          stub.withArgs(utxos[2].txid).callsArgWith(1, null, {
+            confirmations: 6,
+            vin: [],
+          });
+
+          blockchainExplorer.getTransaction = stub;
+
           var txOpts = {
             outputs: [{
               toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
-              amount: 3e8,
+              amount: 5.5e8,
             }],
             feePerKb: 100e2,
-            excludeUnconfirmedUtxos: true,
+            excludeUnconfirmedUtxos: false,
           };
           server.createTx(txOpts, function(err, tx) {
             should.exist(err);
             err.code.should.equal('INSUFFICIENT_FUNDS');
             err.message.should.equal('Insufficient funds');
-            txOpts.outputs[0].amount = 2.5e8;
-            txOpts.excludeUnconfirmedUtxos = true;
+            txOpts.outputs[0].amount = 4.5e8;
             server.createTx(txOpts, function(err, tx) {
-              should.exist(err);
-              err.code.should.equal('INSUFFICIENT_FUNDS_FOR_FEE');
-              err.message.should.equal('Insufficient funds for fee');
+              should.not.exist(err);
+              should.exist(tx);
               done();
             });
           });
