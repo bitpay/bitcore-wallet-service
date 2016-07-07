@@ -4639,6 +4639,46 @@ describe('Wallet service', function() {
         });
       });
     });
+    it('should exclude unsafe inputs', function(done) {
+      helpers.stubUtxos(server, wallet, [0.1, 'u0.2', 'u0.3', 0.4], function(utxos) {
+        var stub = sinon.stub();
+        stub.withArgs(utxos[1].txid).callsArgWith(1, null, {
+          confirmations: 0,
+          vin: [{
+            txid: '111',
+            sequence: 0xffffffff,
+          }, {
+            txid: '222',
+            sequence: 0xffffffff,
+          }],
+        }).withArgs('111').callsArgWith(1, null, {
+          confirmations: 0,
+          vin: [],
+        }).withArgs('222').callsArgWith(1, null, {
+          confirmations: 6,
+          vin: [],
+        });
+
+        stub.withArgs(utxos[2].txid).callsArgWith(1, null, {
+          confirmations: 6,
+          vin: [],
+        });
+
+        blockchainExplorer.getTransaction = stub;
+
+        server.getSendMaxInfo({
+          feePerKb: 100e2,
+          excludeUnconfirmedUtxos: false,
+          returnInputs: true,
+        }, function(err, info) {
+          should.not.exist(err);
+          should.exist(info);
+          info.inputs.length.should.equal(3);
+          info.amount.should.equal(0.8e8 - info.fee);
+          sendTx(info, done);
+        });
+      });
+    });
     it('should ignore utxos not contributing to total amount (below their cost in fee)', function(done) {
       helpers.stubUtxos(server, wallet, ['u0.1', 0.2, 0.3, 0.4, '1bit', '100bit', '200bit'], function() {
         server.getSendMaxInfo({
