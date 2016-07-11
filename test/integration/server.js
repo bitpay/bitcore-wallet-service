@@ -6158,6 +6158,11 @@ describe('Wallet service', function() {
   describe('#getTxHistory', function() {
     var server, wallet, mainAddresses, changeAddresses;
     beforeEach(function(done) {
+      // Consider unconfirmed UTXOs safe
+      blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, null, {
+        confirmations: 6
+      });
+
       helpers.createAndJoinWallet(1, 1, function(s, w) {
         server = s;
         wallet = w;
@@ -6452,7 +6457,7 @@ describe('Wallet service', function() {
         done();
       });
     });
-    it('should handle invalid tx in  history ', function(done) {
+    it('should handle invalid tx in history', function(done) {
       var h = _.clone(TestData.history);
       h.push({
         txid: 'xx'
@@ -6473,6 +6478,55 @@ describe('Wallet service', function() {
         limit: 1000
       }, function(err, txs) {
         err.code.should.equal('HISTORY_LIMIT_EXCEEDED');
+        done();
+      });
+    });
+    it('should get tx history for incoming unsafe txs', function(done) {
+      server._normalizeTxHistory = sinon.stub().returnsArg(0);
+      var txs = [{
+        txid: '333',
+        confirmations: 0,
+        fees: 100,
+        time: 20,
+        vin: [{
+          txid: '111',
+          address: 'external',
+          amount: 500,
+          sequence: 0xffffffff,
+        }, {
+          txid: '222',
+          address: 'external',
+          amount: 100,
+          sequence: 0xffffffff,
+        }],
+        outputs: [{
+          address: mainAddresses[0].address,
+          amount: 200,
+        }],
+      }];
+      helpers.stubHistory(txs);
+
+      var stub = sinon.stub();
+      stub.withArgs('111').callsArgWith(1, null, {
+        confirmations: 0,
+        vin: [],
+      }).withArgs('222').callsArgWith(1, null, {
+        confirmations: 6,
+        vin: [],
+      });
+
+      blockchainExplorer.getTransaction = stub;
+
+      server.getTxHistory({}, function(err, txs) {
+        should.not.exist(err);
+        should.exist(txs);
+        txs.length.should.equal(1);
+        var tx = txs[0];
+        tx.action.should.equal('received');
+        tx.amount.should.equal(200);
+        tx.fees.should.equal(100);
+        tx.time.should.equal(20);
+        tx.unsafe.should.be.true;
         done();
       });
     });
