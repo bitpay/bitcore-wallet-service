@@ -1592,6 +1592,11 @@ describe('Wallet service', function() {
   describe('#getBalance', function() {
     var server, wallet;
     beforeEach(function(done) {
+      // Consider unconfirmed UTXOs safe
+      blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, null, {
+        confirmations: 6
+      });
+
       helpers.createAndJoinWallet(1, 1, function(s, w) {
         server = s;
         wallet = w;
@@ -1694,6 +1699,159 @@ describe('Wallet service', function() {
         });
       });
     });
+    it('should report unsafe balance for unconfirmed chain', function(done) {
+      helpers.stubUtxos(server, wallet, [1, 'u2', 'u1', 3], function(utxos) {
+        var stub = sinon.stub();
+        stub.withArgs(utxos[1].txid).callsArgWith(1, null, {
+          confirmations: 0,
+          vin: [{
+            txid: '111',
+            sequence: 0xffffffff,
+          }, {
+            txid: '222',
+            sequence: 0xffffffff,
+          }],
+        }).withArgs('111').callsArgWith(1, null, {
+          confirmations: 0,
+          vin: [],
+        }).withArgs('222').callsArgWith(1, null, {
+          confirmations: 6,
+          vin: [],
+        });
+
+        stub.withArgs(utxos[2].txid).callsArgWith(1, null, {
+          confirmations: 6,
+          vin: [],
+        });
+
+        blockchainExplorer.getTransaction = stub;
+
+        server.getBalance({}, function(err, balance) {
+          should.not.exist(err);
+          should.exist(balance);
+          balance.totalAmount.should.equal(helpers.toSatoshi(5));
+          balance.lockedAmount.should.equal(0);
+          balance.availableAmount.should.equal(helpers.toSatoshi(5));
+
+          balance.totalConfirmedAmount.should.equal(helpers.toSatoshi(4));
+          balance.lockedConfirmedAmount.should.equal(0);
+          balance.availableConfirmedAmount.should.equal(helpers.toSatoshi(4));
+
+          balance.totalUnsafeAmount.should.equal(helpers.toSatoshi(2));
+          should.not.exist(balance.lockedUnsafeAmount);
+          should.not.exist(balance.availableUnsafeAmount);
+          done();
+        });
+      });
+    });
+    it('should report unsafe balance for RBF txs', function(done) {
+      helpers.stubUtxos(server, wallet, [1, 'u2', 'u1', 3], function(utxos) {
+        var stub = sinon.stub();
+        stub.withArgs(utxos[1].txid).callsArgWith(1, null, {
+          confirmations: 0,
+          vin: [{
+            txid: '111',
+            sequence: 0xffffffff,
+          }, {
+            txid: '222',
+            sequence: 0,
+          }],
+        });
+
+        stub.withArgs(utxos[2].txid).callsArgWith(1, null, {
+          confirmations: 6,
+          vin: [],
+        });
+
+        blockchainExplorer.getTransaction = stub;
+
+        server.getBalance({}, function(err, balance) {
+          should.not.exist(err);
+          should.exist(balance);
+          balance.totalAmount.should.equal(helpers.toSatoshi(5));
+          balance.totalUnsafeAmount.should.equal(helpers.toSatoshi(2));
+          done();
+        });
+      });
+    });
+    it('should report safe if parent tx belongs to wallet', function(done) {
+      helpers.stubUtxos(server, wallet, [1, 'u2', 3], function(utxos) {
+        var stub = sinon.stub();
+        stub.withArgs(utxos[1].txid).callsArgWith(1, null, {
+          confirmations: 0,
+          vin: [{
+            txid: '111',
+            sequence: 0xffffffff,
+          }, {
+            txid: '222',
+            sequence: 0xffffffff,
+          }],
+        }).withArgs('111').callsArgWith(1, null, {
+          confirmations: 0,
+          vin: [],
+        }).withArgs('222').callsArgWith(1, null, {
+          confirmations: 0,
+          vin: [],
+        });
+
+        blockchainExplorer.getTransaction = stub;
+
+        var txp = Model.TxProposal.fromObj({
+          version: 3,
+          id: 1,
+          walletId: wallet.id,
+          creatorId: server.copayerId,
+          txid: utxos[1].txid,
+          status: 'broadcasted'
+        });
+        server.storage.storeTx(wallet.id, txp, function(err) {
+          should.not.exist(err);
+          server.getBalance({}, function(err, balance) {
+            should.not.exist(err);
+            should.exist(balance);
+            balance.totalAmount.should.equal(helpers.toSatoshi(6));
+            balance.totalUnsafeAmount.should.equal(helpers.toSatoshi(0));
+            done();
+          });
+        });
+      });
+    });
+    it('should not report safe if grand-parent tx belongs to wallet but parent tx does not', function(done) {
+      helpers.stubUtxos(server, wallet, [1, 'u2', 3], function(utxos) {
+        var stub = sinon.stub();
+        stub.withArgs(utxos[1].txid).callsArgWith(1, null, {
+          confirmations: 0,
+          vin: [{
+            txid: '111',
+            sequence: 0xffffffff,
+          }],
+        }).withArgs('111').callsArgWith(1, null, {
+          confirmations: 0,
+          vin: [],
+        });
+
+        blockchainExplorer.getTransaction = stub;
+
+        var txp = Model.TxProposal.fromObj({
+          version: 3,
+          id: 1,
+          walletId: wallet.id,
+          creatorId: server.copayerId,
+          txid: '111',
+          status: 'broadcasted'
+        });
+        server.storage.storeTx(wallet.id, txp, function(err) {
+          should.not.exist(err);
+          server.getBalance({}, function(err, balance) {
+            should.not.exist(err);
+            should.exist(balance);
+            balance.totalAmount.should.equal(helpers.toSatoshi(4));
+            balance.totalUnsafeAmount.should.equal(helpers.toSatoshi(2));
+            done();
+          });
+        });
+      });
+    });
   });
 
   describe('#getBalance 2 steps', function() {
@@ -1702,6 +1860,11 @@ describe('Wallet service', function() {
     beforeEach(function(done) {
       clock = sinon.useFakeTimers(Date.now(), 'Date');
       Defaults.TWO_STEP_BALANCE_THRESHOLD = 0;
+
+      // Consider unconfirmed UTXOs safe
+      blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, null, {
+        confirmations: 6
+      });
 
       helpers.createAndJoinWallet(1, 1, function(s, w) {
         server = s;
@@ -2198,6 +2361,11 @@ describe('Wallet service', function() {
       var server, wallet;
 
       beforeEach(function(done) {
+        // Consider unconfirmed UTXOs safe
+        blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, null, {
+          confirmations: 6
+        });
+
         helpers.createAndJoinWallet(2, 3, function(s, w) {
           server = s;
           wallet = w;
@@ -3378,7 +3546,48 @@ describe('Wallet service', function() {
           });
         });
       });
+      it('should exclude unsafe utxos', function(done) {
+        helpers.stubUtxos(server, wallet, [3, 'u1', 'u1', 1], function(utxos) {
+          var stub = sinon.stub();
+          stub.withArgs(utxos[1].txid).callsArgWith(1, null, {
+            confirmations: 0,
+            vin: [{
+              txid: '111',
+              sequence: 0xffffffff,
+            }],
+          }).withArgs('111').callsArgWith(1, null, {
+            confirmations: 0,
+            vin: [],
+          });
 
+          stub.withArgs(utxos[2].txid).callsArgWith(1, null, {
+            confirmations: 6,
+            vin: [],
+          });
+
+          blockchainExplorer.getTransaction = stub;
+
+          var txOpts = {
+            outputs: [{
+              toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
+              amount: 5.5e8,
+            }],
+            feePerKb: 100e2,
+            excludeUnconfirmedUtxos: false,
+          };
+          server.createTx(txOpts, function(err, tx) {
+            should.exist(err);
+            err.code.should.equal('INSUFFICIENT_FUNDS');
+            err.message.should.equal('Insufficient funds');
+            txOpts.outputs[0].amount = 4.5e8;
+            server.createTx(txOpts, function(err, tx) {
+              should.not.exist(err);
+              should.exist(tx);
+              done();
+            });
+          });
+        });
+      });
     });
 
     describe('Backoff time', function(done) {
@@ -3479,6 +3688,12 @@ describe('Wallet service', function() {
       var server, wallet;
       beforeEach(function(done) {
         // log.level = 'debug';
+
+        // Consider unconfirmed UTXOs safe
+        blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, null, {
+          confirmations: 6
+        });
+
         helpers.createAndJoinWallet(1, 2, function(s, w) {
           server = s;
           wallet = w;
@@ -4291,6 +4506,11 @@ describe('Wallet service', function() {
   describe('#getSendMaxInfo', function() {
     var server, wallet;
     beforeEach(function(done) {
+      // Consider unconfirmed UTXOs safe
+      blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, null, {
+        confirmations: 6
+      });
+
       helpers.createAndJoinWallet(2, 3, function(s, w) {
         server = s;
         wallet = w;
@@ -4416,6 +4636,46 @@ describe('Wallet service', function() {
             info.amount.should.equal(0.2e8 - info.fee);
             sendTx(info, done);
           });
+        });
+      });
+    });
+    it('should exclude unsafe inputs', function(done) {
+      helpers.stubUtxos(server, wallet, [0.1, 'u0.2', 'u0.3', 0.4], function(utxos) {
+        var stub = sinon.stub();
+        stub.withArgs(utxos[1].txid).callsArgWith(1, null, {
+          confirmations: 0,
+          vin: [{
+            txid: '111',
+            sequence: 0xffffffff,
+          }, {
+            txid: '222',
+            sequence: 0xffffffff,
+          }],
+        }).withArgs('111').callsArgWith(1, null, {
+          confirmations: 0,
+          vin: [],
+        }).withArgs('222').callsArgWith(1, null, {
+          confirmations: 6,
+          vin: [],
+        });
+
+        stub.withArgs(utxos[2].txid).callsArgWith(1, null, {
+          confirmations: 6,
+          vin: [],
+        });
+
+        blockchainExplorer.getTransaction = stub;
+
+        server.getSendMaxInfo({
+          feePerKb: 100e2,
+          excludeUnconfirmedUtxos: false,
+          returnInputs: true,
+        }, function(err, info) {
+          should.not.exist(err);
+          should.exist(info);
+          info.inputs.length.should.equal(3);
+          info.amount.should.equal(0.8e8 - info.fee);
+          sendTx(info, done);
         });
       });
     });
@@ -5898,6 +6158,11 @@ describe('Wallet service', function() {
   describe('#getTxHistory', function() {
     var server, wallet, mainAddresses, changeAddresses;
     beforeEach(function(done) {
+      // Consider unconfirmed UTXOs safe
+      blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, null, {
+        confirmations: 6
+      });
+
       helpers.createAndJoinWallet(1, 1, function(s, w) {
         server = s;
         wallet = w;
@@ -6192,7 +6457,7 @@ describe('Wallet service', function() {
         done();
       });
     });
-    it('should handle invalid tx in  history ', function(done) {
+    it('should handle invalid tx in history', function(done) {
       var h = _.clone(TestData.history);
       h.push({
         txid: 'xx'
@@ -6213,6 +6478,55 @@ describe('Wallet service', function() {
         limit: 1000
       }, function(err, txs) {
         err.code.should.equal('HISTORY_LIMIT_EXCEEDED');
+        done();
+      });
+    });
+    it('should get tx history for incoming unsafe txs', function(done) {
+      server._normalizeTxHistory = sinon.stub().returnsArg(0);
+      var txs = [{
+        txid: '333',
+        confirmations: 0,
+        fees: 100,
+        time: 20,
+        vin: [{
+          txid: '111',
+          address: 'external',
+          amount: 500,
+          sequence: 0xffffffff,
+        }, {
+          txid: '222',
+          address: 'external',
+          amount: 100,
+          sequence: 0xffffffff,
+        }],
+        outputs: [{
+          address: mainAddresses[0].address,
+          amount: 200,
+        }],
+      }];
+      helpers.stubHistory(txs);
+
+      var stub = sinon.stub();
+      stub.withArgs('111').callsArgWith(1, null, {
+        confirmations: 0,
+        vin: [],
+      }).withArgs('222').callsArgWith(1, null, {
+        confirmations: 6,
+        vin: [],
+      });
+
+      blockchainExplorer.getTransaction = stub;
+
+      server.getTxHistory({}, function(err, txs) {
+        should.not.exist(err);
+        should.exist(txs);
+        txs.length.should.equal(1);
+        var tx = txs[0];
+        tx.action.should.equal('received');
+        tx.amount.should.equal(200);
+        tx.fees.should.equal(100);
+        tx.time.should.equal(20);
+        tx.unsafe.should.be.true;
         done();
       });
     });
