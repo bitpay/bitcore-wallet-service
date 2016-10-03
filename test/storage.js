@@ -223,31 +223,21 @@ describe('Storage', function() {
 
   describe('User stats', function() {
     it('should correctly store user stats', function(done) {
-      var clock = sinon.useFakeTimers('Date');
       var stats = {
         userToken: '1234',
         wallets: ['1', '2', '3']
       };
-      storage.storeUserStats(_.cloneDeep(stats), function(err) {
+      storage.storeUserStats(stats, function(err) {
         should.not.exist(err);
-        clock.tick(1000);
-        storage.storeUserStats(_.cloneDeep(stats), function(err) {
+        should.not.exist(stats._id);
+        storage.db.collection(Storage.collections.USER_STATS).find({}).toArray(function(err, items) {
           should.not.exist(err);
-          storage.db.collection(Storage.collections.USER_STATS).find({}).toArray(function(err, items) {
-            should.not.exist(err);
-            should.exist(items);
-            items.length.should.equal(2);
-            var item = items[0];
-            item.time.should.equal(0);
-            item.userToken.should.equal('1234');
-            item.wallets.length.should.equal(3);
-            item = items[1];
-            item.time.should.equal(1000);
-            item.userToken.should.equal('1234');
-            item.wallets.length.should.equal(3);
-            clock.restore();
-            done();
-          })
+          should.exist(items);
+          items.length.should.equal(1);
+          var item = items[0];
+          item.userToken.should.equal('1234');
+          item.wallets.length.should.equal(3);
+          done();
         })
       });
     });
