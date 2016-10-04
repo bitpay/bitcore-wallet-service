@@ -6911,14 +6911,14 @@ describe('Wallet service', function() {
     });
   });
 
-  describe('#saveUserStats', function() {
-    it('should save user stats', function(done) {
+  describe('#saveUsageStats', function() {
+    it('should save usage stats', function(done) {
       var clock = sinon.useFakeTimers('Date');
       var server = WalletService.getInstance({});
 
       clock.tick(1000);
-      server.saveUserStats({
-        userToken: '123',
+      server.saveUsageStats({
+        user: '123',
         key: 'value'
       }, function(err, stats) {
         should.not.exist(err);
