@@ -6913,4 +6913,24 @@ describe('Wallet service', function() {
       });
     });
   });
+
+  describe('#saveUsageStats', function() {
+    it('should save usage stats', function(done) {
+      var clock = sinon.useFakeTimers('Date');
+      var server = WalletService.getInstance({});
+
+      clock.tick(1000);
+      server.saveUsageStats({
+        user: '123',
+        key: 'value'
+      }, function(err, stats) {
+        should.not.exist(err);
+        should.exist(stats);
+        stats.time.should.equal(1000);
+        clock.restore();
+        done();
+      });
+    });
+  });
+
 });

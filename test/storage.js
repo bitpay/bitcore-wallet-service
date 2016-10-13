@@ -220,4 +220,27 @@ describe('Storage', function() {
       });
     });
   });
+
+  describe('Usage stats', function() {
+    it('should correctly store usage stats', function(done) {
+      var stats = {
+        user: '1234',
+        wallets: ['1', '2', '3']
+      };
+      storage.storeUsageStats(stats, function(err) {
+        should.not.exist(err);
+        should.not.exist(stats._id);
+        storage.db.collection(Storage.collections.USAGE_STATS).find({}).toArray(function(err, items) {
+          should.not.exist(err);
+          should.exist(items);
+          items.length.should.equal(1);
+          var item = items[0];
+          item.user.should.equal('1234');
+          item.wallets.length.should.equal(3);
+          done();
+        })
+      });
+    });
+  });
+
 });
