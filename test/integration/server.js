@@ -2043,7 +2043,30 @@ describe('Wallet service', function() {
   });
 
   describe('#getFeeLevels', function() {
-    var server, wallet;
+    var server, wallet, levels;
+    before(function() {
+      levels = Defaults.FEE_LEVELS;
+      Defaults.FEE_LEVELS = [{
+        name: 'priority',
+        nbBlocks: 1,
+        defaultValue: 50000
+      }, {
+        name: 'normal',
+        nbBlocks: 2,
+        defaultValue: 40000
+      }, {
+        name: 'economy',
+        nbBlocks: 6,
+        defaultValue: 25000
+      }, {
+        name: 'superEconomy',
+        nbBlocks: 24,
+        defaultValue: 10000
+      }];
+    });
+    after(function() {
+      Defaults.FEE_LEVELS = levels;
+    });
     beforeEach(function(done) {
       helpers.createAndJoinWallet(1, 1, function(s, w) {
         server = s;
@@ -2606,11 +2629,14 @@ describe('Wallet service', function() {
                   server.getNotifications({}, function(err, notifications) {
                     should.not.exist(err);
 
-                    var n = _.find(notifications, {'type': 'NewTxProposal'});
+                    var n = _.find(notifications, {
+                      'type': 'NewTxProposal'
+                    });
                     should.exist(n);
                     should.exist(n.data.txProposalId);
                     should.exist(n.data.message);
-
+                    should.exist(n.data.creatorId);
+                    n.data.creatorId.should.equal(server.copayerId);
                     done();
                   });
                 });
@@ -3758,19 +3784,21 @@ describe('Wallet service', function() {
       server.editTxNote({
         txid: '123',
         body: 'note body'
-      }, function(err) {
+      }, function(err, note) {
         should.not.exist(err);
+        note.txid.should.equal('123');
+        note.walletId.should.equal(wallet.id);
+        note.body.should.equal('note body');
+        note.editedBy.should.equal(server.copayerId);
+        note.editedByName.should.equal('copayer 1');
+        note.createdOn.should.equal(note.editedOn);
         server.getTxNote({
           txid: '123',
         }, function(err, note) {
           should.not.exist(err);
           should.exist(note);
-          note.txid.should.equal('123');
-          note.walletId.should.equal(wallet.id);
           note.body.should.equal('note body');
           note.editedBy.should.equal(server.copayerId);
-          note.editedByName.should.equal('copayer 1');
-          note.createdOn.should.equal(note.editedOn);
           done();
         });
       });
@@ -5920,6 +5948,7 @@ describe('Wallet service', function() {
                 should.exist(txs);
                 txs.length.should.equal(1);
                 var tx = txs[0];
+                tx.createdOn.should.equal(txp.createdOn);
                 tx.action.should.equal('sent');
                 tx.amount.should.equal(0.8e8);
                 tx.message.should.equal('some message');
