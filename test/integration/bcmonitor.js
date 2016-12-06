@@ -42,7 +42,6 @@ describe('Blockchain monitor', function() {
       helpers.createAndJoinWallet(2, 3, function(s, w) {
         server = s;
         wallet = w;
-
         var bcmonitor = new BlockchainMonitor();
         bcmonitor.start({
           lockOpts: {},
@@ -61,15 +60,20 @@ describe('Blockchain monitor', function() {
   });
 
   it('should notify copayers of incoming txs', function(done) {
-    server.createAddress({}, function(err, address) {
-      should.not.exist(err);
 
-      var incoming = {
-        txid: '123',
-        vout: [{}],
-      };
-      incoming.vout[0][address.address] = 1500;
+    var incoming = {
+      txid: '123',
+      vout: [{}],
+    };
+    var address;
+
+    server.createAddress({}, function(err, a) {
+      should.not.exist(err);
+      address = a.address;
+
+      incoming.vout[0][address] = 1500;
       socket.handlers['tx'](incoming);
+
 
       setTimeout(function() {
         server.getNotifications({}, function(err, notifications) {
@@ -80,11 +84,51 @@ describe('Blockchain monitor', function() {
           should.exist(notification);
           notification.walletId.should.equal(wallet.id);
           notification.data.txid.should.equal('123');
-          notification.data.address.should.equal(address.address);
+          notification.data.address.should.equal(address);
           notification.data.amount.should.equal(1500);
           done();
         });
       }, 100);
+    });
+  });
+
+  it('should update address lastUsedOn for incoming txs', function(done) {
+
+    var incoming = {
+      txid: '123',
+      vout: [{}, {}],
+    };
+    var address, address2;
+    var aLongTimeAgo = Date.now() - (1000 * 10 * 86400);
+
+    var clock = sinon.useFakeTimers(aLongTimeAgo, 'Date');
+
+    server.createAddress({}, function(err, a) {
+      should.not.exist(err);
+      address = a.address;
+
+      server.createAddress({}, function(err, a2) {
+        should.not.exist(err);
+        address2 = a2.address;
+
+        clock.restore();
+
+        storage.fetchRecentAddresses(wallet.id, (Date.now() / 1000) - 100, function(err, addr) {
+          addr.length.should.equal(0);
+
+          incoming.vout[0][address] = 1500;
+          incoming.vout[1][address2] = 150;
+
+          socket.handlers['tx'](incoming);
+
+          setTimeout(function() {
+            storage.fetchRecentAddresses(wallet.id, (Date.now() / 1000) - 100, function(err, addr) {
+              addr.length.should.equal(2);
+              done();
+            });
+          }, 50);
+        });
+      });
     });
   });
 });
