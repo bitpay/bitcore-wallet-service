@@ -38,7 +38,7 @@ describe('Blockchain monitor', function() {
       storage = res.storage;
       blockchainExplorer = res.blockchainExplorer;
       blockchainExplorer.initSocket = sinon.stub().returns(socket);
-      blockchainExplorer.getBlock = sinon.stub().yields(null);
+      blockchainExplorer.getBlock = sinon.stub().yields('error');
 
       helpers.createAndJoinWallet(2, 3, function(s, w) {
         server = s;
@@ -133,7 +133,7 @@ describe('Blockchain monitor', function() {
     });
   });
 
-  it.only('should process incoming blocks', function(done) {
+  it('should process incoming blocks', function(done) {
 
     var incoming = {
       hash: '123',
@@ -145,7 +145,9 @@ describe('Blockchain monitor', function() {
 
       // TODO add address to block data
 
-      blockchainExplorer.getBlock = sinon.stub().yields(null, 'xxx');
+      blockchainExplorer.getBlock = sinon.stub().yields(null, {
+        rawblock: TestData.block
+      });
 
       socket.handlers['block'](incoming);
 

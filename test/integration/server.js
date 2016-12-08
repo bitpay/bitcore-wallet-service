@@ -6129,7 +6129,7 @@ describe('Wallet service', function() {
       });
     });
 
-    describe('Downloading history', function() {
+    describe.only('Downloading history', function() {
       var h;
       beforeEach(function(done) {
         blockchainExplorer.getBlockchainHeight = sinon.stub().callsArgWith(0, null, 1000);
