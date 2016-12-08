@@ -38,6 +38,7 @@ describe('Blockchain monitor', function() {
       storage = res.storage;
       blockchainExplorer = res.blockchainExplorer;
       blockchainExplorer.initSocket = sinon.stub().returns(socket);
+      blockchainExplorer.getBlock = sinon.stub().yields(null);
 
       helpers.createAndJoinWallet(2, 3, function(s, w) {
         server = s;
@@ -129,6 +130,28 @@ describe('Blockchain monitor', function() {
           }, 50);
         });
       });
+    });
+  });
+
+  it.only('should process incoming blocks', function(done) {
+
+    var incoming = {
+      hash: '123',
+    };
+    var address;
+    server.createAddress({}, function(err, a) {
+      should.not.exist(err);
+      address = a.address;
+
+      // TODO add address to block data
+
+      blockchainExplorer.getBlock = sinon.stub().yields(null, 'xxx');
+
+      socket.handlers['block'](incoming);
+
+      setTimeout(function() {
+        done();
+      }, 50);
     });
   });
 });
