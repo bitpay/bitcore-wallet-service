@@ -233,9 +233,9 @@ helpers._parseAmount = function(str) {
 
   switch (match[3]) {
     default:
-    case 'btc':
+      case 'btc':
       result.amount = Utils.strip(+match[2] * 1e8);
-      break;
+    break;
     case 'bit':
       result.amount = Utils.strip(+match[2] * 1e2);
       break
@@ -417,6 +417,20 @@ helpers.createAddresses = function(server, wallet, main, change, cb) {
     return cb(_.take(addresses, main), _.takeRight(addresses, change));
   });
 };
+
+
+helpers.insertFakeAddresses = function(server, wallet, addresses, cb) {
+  async.each(addresses, function(addr, i_cb) {
+    var addressObj = Model.Address.create({
+      walletId: wallet.id,
+      address: addr,
+    });
+    server.storage.storeAddressAndWallet(wallet, addressObj, function(err) {
+      return i_cb(err);
+    });
+  }, cb);
+};
+
 
 helpers.createAndPublishTx = function(server, txOpts, signingKey, cb) {
   server.createTx(txOpts, function(err, txp) {

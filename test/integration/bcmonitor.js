@@ -138,22 +138,27 @@ describe('Blockchain monitor', function() {
     var incoming = {
       hash: '123',
     };
-    var address;
-    server.createAddress({}, function(err, a) {
+
+
+    blockchainExplorer.getBlock = sinon.stub().yields(null, {
+      rawblock: TestData.block.rawblock
+    });
+
+    var fakeAddresses= TestData.block.addresses.splice(0, 3);
+
+    server.getWallet({}, function(err, wallet) {
       should.not.exist(err);
-      address = a.address;
+      helpers.insertFakeAddresses(server, wallet, fakeAddresses, function(err) {
+        should.not.exist(err);
 
-      // TODO add address to block data
-
-      blockchainExplorer.getBlock = sinon.stub().yields(null, {
-        rawblock: TestData.block
+        socket.handlers['block'](incoming);
+        setTimeout(function() {
+          storage.fetchRecentAddresses(wallet.id, (Date.now() / 1000) - 100, function(err, addr) {
+            _.pluck(addr,'address').should.be.deep.equal(fakeAddresses);
+            done();
+          });
+        }, 50);
       });
-
-      socket.handlers['block'](incoming);
-
-      setTimeout(function() {
-        done();
-      }, 50);
     });
   });
 });
