@@ -144,17 +144,30 @@ describe('Blockchain monitor', function() {
       rawblock: TestData.block.rawblock
     });
 
-    var fakeAddresses= TestData.block.addresses.splice(0, 3);
+
+    server.storage.getTip = sinon.stub().yields(null, {
+      hash: TestData.block.prev,
+      updatedOn: Date.now(),
+    });
+
+
+    var fakeAddresses = TestData.block.addresses.splice(0, 3);
 
     server.getWallet({}, function(err, wallet) {
       should.not.exist(err);
+
+      var aLongTimeAgo = Date.now() - (1000 * 10 * 86400);
+      var clock = sinon.useFakeTimers(aLongTimeAgo, 'Date');
+
+
       helpers.insertFakeAddresses(server, wallet, fakeAddresses, function(err) {
         should.not.exist(err);
 
+        clock.restore();
         socket.handlers['block'](incoming);
         setTimeout(function() {
           storage.fetchRecentAddresses(wallet.id, (Date.now() / 1000) - 100, function(err, addr) {
-            _.pluck(addr,'address').should.be.deep.equal(fakeAddresses);
+            _.pluck(addr, 'address').should.be.deep.equal(fakeAddresses);
             done();
           });
         }, 50);
