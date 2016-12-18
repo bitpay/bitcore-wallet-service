@@ -120,7 +120,7 @@ describe('ExpressApp', function() {
 
       it('/v1/addresses - getAddressFromWallet()', function(done) {
         var server = {
-          getAddressFromWallet: sinon.stub().callsArgWith(2, null, {}),
+          getAddressFromWallet: sinon.stub().callsArgWith(1, null, {}),
         };
         var TestExpressApp = proxyquire('../lib/expressapp', {
           './server': {
@@ -139,10 +139,9 @@ describe('ExpressApp', function() {
           request(requestOptions, function(err, res, body) {
             should.not.exist(err);
             res.statusCode.should.equal(200);
-            var argWalletId = server.getAddressFromWallet.getCalls()[0].args[0];
-            var argAddress = server.getAddressFromWallet.getCalls()[0].args[1];
-            argWalletId.should.equal('ABCD');
-            argAddress.should.equal('1234');
+            var args = server.getAddressFromWallet.getCalls()[0].args[0];
+            args.walletId.should.equal('ABCD');
+            args.address.should.equal('1234');
             done();
           });
         });
