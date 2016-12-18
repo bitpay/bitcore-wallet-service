@@ -89,7 +89,7 @@ describe('ExpressApp', function() {
         });
       });
 
-      it('/v1/addresses', function(done) {
+      it('/v1/addresses - getMainAddresses()', function(done) {
         var server = {
           getMainAddresses: sinon.stub().callsArgWith(1, null, {}),
         };
@@ -113,6 +113,36 @@ describe('ExpressApp', function() {
             var args = server.getMainAddresses.getCalls()[0].args[0];
             args.limit.should.equal(4);
             args.reverse.should.be.true;
+            done();
+          });
+        });
+      });
+
+      it('/v1/addresses - getAddressFromWallet()', function(done) {
+        var server = {
+          getAddressFromWallet: sinon.stub().callsArgWith(2, null, {}),
+        };
+        var TestExpressApp = proxyquire('../lib/expressapp', {
+          './server': {
+            initialize: sinon.stub().callsArg(1),
+            getInstanceWithAuth: sinon.stub().callsArgWith(1, null, server),
+          }
+        });
+        start(TestExpressApp, function() {
+          var requestOptions = {
+            url: testHost + ':' + testPort + config.basePath + '/v1/addresses?walletId=ABCD&address=1234',
+            headers: {
+              'x-identity': 'identity',
+              'x-signature': 'signature'
+            }
+          };
+          request(requestOptions, function(err, res, body) {
+            should.not.exist(err);
+            res.statusCode.should.equal(200);
+            var argWalletId = server.getAddressFromWallet.getCalls()[0].args[0];
+            var argAddress = server.getAddressFromWallet.getCalls()[0].args[1];
+            argWalletId.should.equal('ABCD');
+            argAddress.should.equal('1234');
             done();
           });
         });
