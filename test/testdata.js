@@ -296,4 +296,4 @@ var addresses = [ 'mzrj4QmPhk98vc2yQw42uCsgwfBjVzPPLM',
 module.exports.keyPair = keyPair;
 module.exports.copayers = copayers;
 module.exports.history = history;
-module.exports.block = { rawblock: rawblock, addresses: addresses, prev: '0000000000001e5b4b49aef6109a1ceeee9d4f628882bce97e06aa0f2889aee1'};
+module.exports.block = { rawblock: rawblock, addresses: addresses, prev: '0000000000001e5b4b49aef6109a1ceeee9d4f628882bce97e06aa0f2889aee1', time: 1481218620};

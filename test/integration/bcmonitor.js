@@ -139,12 +139,11 @@ describe('Blockchain monitor', function() {
       hash: '123',
     };
 
-
     blockchainExplorer.getBlock = sinon.stub().yields(null, {
       rawblock: TestData.block.rawblock
     });
 
-    server.storage.getTip = sinon.stub().yields(null, {
+    server.storage.getBlockchainTip = sinon.stub().yields(null, {
       hashes: [TestData.block.prev],
       updatedOn: Date.now(),
     });
@@ -155,18 +154,18 @@ describe('Blockchain monitor', function() {
     server.getWallet({}, function(err, wallet) {
       should.not.exist(err);
 
-      var aLongTimeAgo = Date.now() - (1000 * 10 * 86400);
-      var clock = sinon.useFakeTimers(aLongTimeAgo, 'Date');
+      // 
 
 
       helpers.insertFakeAddresses(server, wallet, fakeAddresses, function(err) {
         should.not.exist(err);
 
-        clock.restore();
         socket.handlers['block'](incoming);
         setTimeout(function() {
+          var clock = sinon.useFakeTimers(TestData.block.time, 'Date');
           storage.fetchRecentAddresses(wallet.id, (Date.now() / 1000) - 100, function(err, addr) {
             _.pluck(addr, 'address').should.be.deep.equal(fakeAddresses);
+            clock.restore();
             done();
           });
         }, 50);
@@ -186,7 +185,7 @@ describe('Blockchain monitor', function() {
       rawblock: TestData.block.rawblock
     });
 
-    server.storage.getTip = sinon.stub().yields(null);
+    server.storage.getBlockchainTip = sinon.stub().yields(null);
 
 
     var fakeAddresses = TestData.block.addresses.splice(0, 3);
