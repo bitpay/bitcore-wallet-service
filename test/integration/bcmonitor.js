@@ -144,9 +144,8 @@ describe('Blockchain monitor', function() {
       rawblock: TestData.block.rawblock
     });
 
-
     server.storage.getTip = sinon.stub().yields(null, {
-      hash: TestData.block.prev,
+      hashes: [TestData.block.prev],
       updatedOn: Date.now(),
     });
 
@@ -174,4 +173,34 @@ describe('Blockchain monitor', function() {
       });
     });
   });
+
+
+  // TODO 
+  it('should process all blocks until the tip is found', function(done) {
+
+    var incoming = {
+      hash: '123',
+    };
+
+    blockchainExplorer.getBlock = sinon.stub().yields(null, {
+      rawblock: TestData.block.rawblock
+    });
+
+    server.storage.getTip = sinon.stub().yields(null);
+
+
+    var fakeAddresses = TestData.block.addresses.splice(0, 3);
+
+    server.getWallet({}, function(err, wallet) {
+      should.not.exist(err);
+
+      var aLongTimeAgo = Date.now() - (1000 * 10 * 86400);
+
+      socket.handlers['block'](incoming);
+      setTimeout(function() {
+        done();
+      }, 50);
+    });
+  });
+
 });
