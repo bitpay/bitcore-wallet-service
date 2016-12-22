@@ -25,7 +25,7 @@ socket.on = function(eventName, handler) {
 };
 
 describe('Blockchain monitor', function() {
-  var server, wallet;
+  var server, wallet, bcmonitor;
 
   before(function(done) {
     helpers.before(done);
@@ -43,7 +43,7 @@ describe('Blockchain monitor', function() {
       helpers.createAndJoinWallet(2, 3, function(s, w) {
         server = s;
         wallet = w;
-        var bcmonitor = new BlockchainMonitor();
+        bcmonitor = new BlockchainMonitor();
         bcmonitor.start({
           lockOpts: {},
           messageBroker: server.messageBroker,
@@ -135,9 +135,7 @@ describe('Blockchain monitor', function() {
 
   it('should process incoming blocks', function(done) {
 
-    var incoming = {
-      hash: '123',
-    };
+    var incoming = '1234';
 
     blockchainExplorer.getBlock = sinon.stub().yields(null, {
       rawblock: TestData.block.rawblock
@@ -157,36 +155,57 @@ describe('Blockchain monitor', function() {
       // 
 
 
-      helpers.insertFakeAddresses(server, wallet, fakeAddresses, function(err) {
+      helpers.insertFakeAddresses(server, wallet, fakeAddresses, null, function(err) {
         should.not.exist(err);
 
-        socket.handlers['block'](incoming);
-        setTimeout(function() {
-          var clock = sinon.useFakeTimers(TestData.block.time, 'Date');
-          storage.fetchRecentAddresses(wallet.id, (Date.now() / 1000) - 100, function(err, addr) {
-            _.pluck(addr, 'address').should.be.deep.equal(fakeAddresses);
-            clock.restore();
-            done();
-          });
-        }, 50);
+        var clock = sinon.useFakeTimers(TestData.block.time, 'Date');
+        storage.fetchRecentAddresses(wallet.id, (Date.now() / 1000) - 100, function(err, addr) {
+          _.pluck(addr, 'address').should.be.deep.equal([]);
+          clock.restore();
+
+          // addresses should be marked with block's timestamp
+          socket.handlers['block'](incoming);
+
+
+          var storeOld = bcmonitor._storeAndBroadcastNotification;
+          bcmonitor._storeAndBroadcastNotification = function() {
+            bcmonitor._storeAndBroadcastNotification = storeOld;
+            var clock = sinon.useFakeTimers(TestData.block.time, 'Date');
+            storage.fetchRecentAddresses(wallet.id, (Date.now() / 1000) - 100, function(err, addr) {
+              _.pluck(addr, 'address').should.be.deep.equal(fakeAddresses);
+              clock.restore();
+              done();
+            });
+          }
+        });
       });
     });
   });
 
 
-  // TODO 
   it('should process all blocks until the tip is found', function(done) {
 
-    var incoming = {
-      hash: '123',
-    };
+    var incoming = '1234';
 
     blockchainExplorer.getBlock = sinon.stub().yields(null, {
       rawblock: TestData.block.rawblock
     });
 
-    server.storage.getBlockchainTip = sinon.stub().yields(null);
 
+    var i = 0;
+    var prevOld = bcmonitor._getBlockPrevHash;
+    var tipHashes = [0, 0, TestData.block.prev, 0];
+    var expected = _.clone(tipHashes);
+    expected.unshift(incoming);
+
+    bcmonitor._getBlockPrevHash = function() {
+      return (i++ > 5) ? TestData.block.prev : '00';
+    };
+    server.storage.getBlockchainTip = sinon.stub().yields(null, {
+      hashes: tipHashes
+    });
+
+    var spy = sinon.spy(server.storage, 'updateBlockchainTip');
 
     var fakeAddresses = TestData.block.addresses.splice(0, 3);
 
@@ -194,11 +213,17 @@ describe('Blockchain monitor', function() {
       should.not.exist(err);
 
       var aLongTimeAgo = Date.now() - (1000 * 10 * 86400);
-
       socket.handlers['block'](incoming);
-      setTimeout(function() {
+
+
+      var storeOld = bcmonitor._storeAndBroadcastNotification;
+      bcmonitor._storeAndBroadcastNotification = function() {
+        bcmonitor._getBlockPrevHash = prevOld;
+        bcmonitor._storeAndBroadcastNotification = storeOld;
+
+        spy.getCall(0).args[1].should.deep.equal(expected);
         done();
-      }, 50);
+      };
     });
   });
 

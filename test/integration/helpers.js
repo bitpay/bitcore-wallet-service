@@ -419,12 +419,13 @@ helpers.createAddresses = function(server, wallet, main, change, cb) {
 };
 
 
-helpers.insertFakeAddresses = function(server, wallet, addresses, cb) {
+helpers.insertFakeAddresses = function(server, wallet, addresses, lastUsedOn, cb) {
   async.each(addresses, function(addr, i_cb) {
     var addressObj = Model.Address.create({
       walletId: wallet.id,
       address: addr,
     });
+    addressObj.lastUsedOn = _.isUndefined(lastUsedOn) ?  Math.floor(Date.now()/1000) : lastUsedOn;
     server.storage.storeAddressAndWallet(wallet, addressObj, function(err) {
       return i_cb(err);
     });
