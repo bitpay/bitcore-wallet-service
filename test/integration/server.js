@@ -1112,6 +1112,7 @@ describe('Wallet service', function() {
           address.isChange.should.be.false;
           address.path.should.equal('m/2147483647/0/0');
           address.type.should.equal('P2SH');
+          address.hasBalance.should.be.false;
           server.getNotifications({}, function(err, notifications) {
             should.not.exist(err);
             var notif = _.find(notifications, {
@@ -1175,6 +1176,7 @@ describe('Wallet service', function() {
           address.isChange.should.be.false;
           address.path.should.equal('m/0/0');
           address.type.should.equal('P2SH');
+          address.hasBalance.should.be.false;
           server.getNotifications({}, function(err, notifications) {
             should.not.exist(err);
             var notif = _.find(notifications, {
@@ -1242,6 +1244,7 @@ describe('Wallet service', function() {
           address.isChange.should.be.false;
           address.path.should.equal('m/0/0');
           address.type.should.equal('P2PKH');
+          address.hasBalance.should.be.false;
           server.getNotifications({}, function(err, notifications) {
             should.not.exist(err);
             var notif = _.find(notifications, {
@@ -1805,7 +1808,7 @@ describe('Wallet service', function() {
         });
       });
     });
-    it('should only include addresses with balance', function(done) {
+    it('should only return addresses with balance', function(done) {
       helpers.stubUtxos(server, wallet, 1, function(utxos) {
         server.createAddress({}, function(err, address) {
           should.not.exist(err);
@@ -1827,6 +1830,29 @@ describe('Wallet service', function() {
           should.exist(err);
           err.toString().should.equal('dummy error');
           done();
+        });
+      });
+    });
+    it.only('should tag addresses with balance', function(done) {
+      helpers.stubUtxos(server, wallet, 1, function(utxos) {
+        server.createAddress({}, function(err, newAddress) {
+          should.not.exist(err);
+          server.getBalance({}, function(err, balance) {
+            should.not.exist(err);
+            balance.byAddress.length.should.equal(1);
+            balance.byAddress[0].address.should.equal(utxos[0].address);
+            server.getMainAddresses({}, function(err, addresses) {
+              should.not.exist(err);
+              addresses.length.should.equal(2);
+              _.find(addresses, {
+                address: utxos[0].address
+              }).hasBalance.should.be.true;
+              _.find(addresses, {
+                address: newAddress.address
+              }).hasBalance.should.be.false;
+              done();
+            });
+          });
         });
       });
     });
