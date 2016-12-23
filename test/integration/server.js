@@ -1833,7 +1833,7 @@ describe('Wallet service', function() {
         });
       });
     });
-    it.only('should tag addresses with balance', function(done) {
+    it('should tag addresses with balance', function(done) {
       helpers.stubUtxos(server, wallet, 1, function(utxos) {
         server.createAddress({}, function(err, newAddress) {
           should.not.exist(err);
@@ -1851,6 +1851,34 @@ describe('Wallet service', function() {
                 address: newAddress.address
               }).hasBalance.should.be.false;
               done();
+            });
+          });
+        });
+      });
+    });
+    it('should only request balance for relevant addresses', function(done) {
+      var clock = sinon.useFakeTimers(Date.now(), 'Date');
+      helpers.stubUtxos(server, wallet, 1, function(utxos) {
+        server.storage.updateHasBalance(utxos[0].address, true, function() {
+          server.createAddress({}, function(err, oldAddress) {
+            should.not.exist(err);
+
+            clock.tick(365 * 24 * 3600 * 1000); // One year
+            server.createAddress({}, function(err, newAddress) {
+              should.not.exist(err);
+              var getUtxosSpy = sinon.spy(blockchainExplorer, 'getUtxos');
+              server.getBalance({}, function(err, balance) {
+                should.not.exist(err);
+                balance.byAddress.length.should.equal(1);
+                balance.byAddress[0].address.should.equal(utxos[0].address);
+
+                getUtxosSpy.callCount.should.equal(1);
+                var addressesInCall = getUtxosSpy.getCalls()[0].args[0];
+                addressesInCall.length.should.equal(2);
+                addressesInCall.should.not.contain(oldAddress.address);
+                clock.restore();
+                done();
+              });
             });
           });
         });
