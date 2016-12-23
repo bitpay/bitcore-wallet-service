@@ -1884,6 +1884,33 @@ describe('Wallet service', function() {
         });
       });
     });
+    it('should request balance for previously stored addresses', function(done) {
+      var clock = sinon.useFakeTimers(Date.now(), 'Date');
+      helpers.stubUtxos(server, wallet, 1, function(utxos) {
+        server.getMainAddresses({}, function(err, addr) {
+          delete addr[0].hasBalance;
+          var Collections = require('../../lib/storage').collections;
+          server.storage.db.collection(Collections.ADDRESSES).update({
+            address: addr[0].address
+          }, addr[0], function(err) {
+            should.not.exist(err);
+            clock.tick(365 * 24 * 3600 * 1000); // One year
+            server.getBalance({}, function(err, balance) {
+              should.not.exist(err);
+              balance.byAddress.length.should.equal(1);
+              balance.byAddress[0].address.should.equal(utxos[0].address);
+              server.getMainAddresses({}, function(err, addresses) {
+                _.find(addresses, {
+                  address: utxos[0].address
+                }).hasBalance.should.be.true;
+                clock.restore();
+                done();
+              });
+            });
+          });
+        });
+      });
+    });
   });
 
   describe('#getFeeLevels', function() {
