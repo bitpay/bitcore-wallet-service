@@ -15,7 +15,7 @@ BWS can usually be installed within minutes and accommodates all the needed infr
   
 See [Bitcore-wallet-client] (https://github.com/bitpay/bitcore-wallet-client) for the *official* client library that communicates to BWS and verifies its response. Also check [Bitcore-wallet] (https://github.com/bitpay/bitcore-wallet) for a simple CLI wallet implementation that relays on BWS.
 
-BWS have a extensive test suite but have not been tested on production environments yet and have been recently released, so it it is still should be considered  BETA software.  
+BWS is been used in production enviroments for [Copay Wallet](https://copay.io), [Bitpay App wallet](https://bitpay.com/wallet) and others.  
 
 More about BWS at https://blog.bitpay.com/announcing-the-bitcore-wallet-suite/
 
@@ -30,6 +30,8 @@ This will launch the BWS service (with default settings) at `http://localhost:32
 BWS needs mongoDB. You can configure the connection at `config.js`
 
 BWS supports SSL and Clustering. For a detailed guide on installing BWS with extra features see [Installing BWS](https://github.com/bitpay/bitcore-wallet-service/blob/master/installation.md). 
+
+BWS uses by default a Request Rate Limitation to CreateWallet endpoint. If you need to modify it, check defaults.js' `Defaults.RateLimit`
 
 # Security Considerations
  * Private keys are never sent to BWS. Copayers store them locally.
