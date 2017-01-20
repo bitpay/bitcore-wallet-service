@@ -1832,6 +1832,315 @@ describe('Wallet service', function() {
     });
   });
 
+  describe('#getBalance 2 steps', function() {
+    var server, wallet, clock;
+    var _threshold = Defaults.TWO_STEP_BALANCE_THRESHOLD;
+    beforeEach(function(done) {
+      clock = sinon.useFakeTimers(Date.now(), 'Date');
+      Defaults.TWO_STEP_BALANCE_THRESHOLD = 0;
+
+      helpers.createAndJoinWallet(1, 1, function(s, w) {
+        server = s;
+        wallet = w;
+        done();
+      });
+    });
+    afterEach(function() {
+      clock.restore();
+      Defaults.TWO_STEP_BALANCE_THRESHOLD = _threshold;
+    });
+
+    it('should get balance', function(done) {
+      helpers.stubUtxos(server, wallet, [1, 'u2', 3], function() {
+        server.getBalance({
+          twoStep: true
+        }, function(err, balance) {
+          should.not.exist(err);
+          should.exist(balance);
+          balance.totalAmount.should.equal(helpers.toSatoshi(6));
+          balance.lockedAmount.should.equal(0);
+          balance.availableAmount.should.equal(helpers.toSatoshi(6));
+
+          balance.totalConfirmedAmount.should.equal(helpers.toSatoshi(4));
+          balance.lockedConfirmedAmount.should.equal(0);
+          balance.availableConfirmedAmount.should.equal(helpers.toSatoshi(4));
+
+          should.exist(balance.byAddress);
+          balance.byAddress.length.should.equal(2);
+          balance.byAddress[0].amount.should.equal(helpers.toSatoshi(4));
+          balance.byAddress[1].amount.should.equal(helpers.toSatoshi(2));
+          setTimeout(done, 100);
+        });
+      });
+    });
+
+    it('should trigger notification when balance of non-prioritary addresses is updated', function(done) {
+      var oldAddrs, newAddrs;
+
+      async.series([
+
+        function(next) {
+          helpers.createAddresses(server, wallet, 2, 0, function(addrs) {
+            oldAddrs = addrs;
+            next();
+          });
+        },
+        function(next) {
+          clock.tick(7 * 24 * 3600 * 1000);
+          helpers.createAddresses(server, wallet, 2, 0, function(addrs) {
+            newAddrs = addrs;
+            server._getActiveAddresses(function(err, active) {
+              should.not.exist(err);
+              should.not.exist(active);
+              helpers.stubUtxos(server, wallet, [1, 2], {
+                addresses: [oldAddrs[0], newAddrs[0]],
+              }, function() {
+                next();
+              });
+            });
+          });
+        },
+        function(next) {
+          server.getBalance({
+            twoStep: true
+          }, function(err, balance) {
+            should.not.exist(err);
+            should.exist(balance);
+            balance.totalAmount.should.equal(helpers.toSatoshi(3));
+            next();
+          });
+        },
+        function(next) {
+          setTimeout(next, 100);
+        },
+        function(next) {
+          server._getActiveAddresses(function(err, active) {
+            should.not.exist(err);
+            should.exist(active);
+            active.length.should.equal(3);
+            next();
+          });
+        },
+        function(next) {
+          helpers.stubUtxos(server, wallet, 0.5, {
+            addresses: oldAddrs[1],
+            keepUtxos: true,
+          }, function() {
+            next();
+          });
+        },
+        function(next) {
+          server.getBalance({
+            twoStep: true
+          }, function(err, balance) {
+            should.not.exist(err);
+            should.exist(balance);
+            balance.totalAmount.should.equal(helpers.toSatoshi(3));
+            next();
+          });
+        },
+        function(next) {
+          setTimeout(next, 100);
+        },
+        function(next) {
+          server.getNotifications({}, function(err, notifications) {
+            should.not.exist(err);
+            var last = _.last(notifications);
+            last.type.should.equal('BalanceUpdated');
+            var balance = last.data;
+            balance.totalAmount.should.equal(helpers.toSatoshi(3.5));
+            next();
+          });
+        },
+      ], function(err) {
+        should.not.exist(err);
+        done();
+      });
+    });
+
+    it('should not trigger notification when only balance of prioritary addresses is updated', function(done) {
+      var oldAddrs, newAddrs;
+
+      async.series([
+
+        function(next) {
+          helpers.createAddresses(server, wallet, 2, 0, function(addrs) {
+            oldAddrs = addrs;
+            next();
+          });
+        },
+        function(next) {
+          clock.tick(7 * 24 * 3600 * 1000);
+          helpers.createAddresses(server, wallet, 2, 0, function(addrs) {
+            newAddrs = addrs;
+            helpers.stubUtxos(server, wallet, [1, 2], {
+              addresses: newAddrs,
+            }, function() {
+              next();
+            });
+          });
+        },
+        function(next) {
+          server.getBalance({
+            twoStep: true
+          }, function(err, balance) {
+            should.not.exist(err);
+            should.exist(balance);
+            balance.totalAmount.should.equal(helpers.toSatoshi(3));
+            next();
+          });
+        },
+        function(next) {
+          setTimeout(next, 100);
+        },
+        function(next) {
+          helpers.stubUtxos(server, wallet, 0.5, {
+            addresses: newAddrs[0],
+            keepUtxos: true,
+          }, function() {
+            next();
+          });
+        },
+        function(next) {
+          server.getBalance({
+            twoStep: true
+          }, function(err, balance) {
+            should.not.exist(err);
+            should.exist(balance);
+            balance.totalAmount.should.equal(helpers.toSatoshi(3.5));
+            next();
+          });
+        },
+        function(next) {
+          setTimeout(next, 100);
+        },
+        function(next) {
+          server.getNotifications({}, function(err, notifications) {
+            should.not.exist(err);
+            var last = _.last(notifications);
+            last.type.should.not.equal('BalanceUpdated');
+            next();
+          });
+        },
+      ], function(err) {
+        should.not.exist(err);
+        done();
+      });
+    });
+
+    it('should resolve balance of new addresses immediately', function(done) {
+      var addresses;
+
+      async.series([
+
+        function(next) {
+          helpers.createAddresses(server, wallet, 4, 0, function(addrs) {
+            addresses = addrs;
+            helpers.stubUtxos(server, wallet, [1, 2], {
+              addresses: _.take(addresses, 2),
+            }, function() {
+              next();
+            });
+          });
+        },
+        function(next) {
+          server.getBalance({
+            twoStep: true
+          }, function(err, balance) {
+            should.not.exist(err);
+            should.exist(balance);
+            balance.totalAmount.should.equal(helpers.toSatoshi(3));
+            next();
+          });
+        },
+        function(next) {
+          server.createAddress({}, function(err, addr) {
+            helpers.stubUtxos(server, wallet, 0.5, {
+              addresses: addr,
+              keepUtxos: true,
+            }, function() {
+              next();
+            });
+          });
+        },
+        function(next) {
+          server.getBalance({
+            twoStep: true
+          }, function(err, balance) {
+            should.not.exist(err);
+            should.exist(balance);
+            balance.totalAmount.should.equal(helpers.toSatoshi(3.5));
+            next();
+          });
+        },
+        function(next) {
+          setTimeout(next, 100);
+        },
+        function(next) {
+          server.getNotifications({}, function(err, notifications) {
+            should.not.exist(err);
+            var last = _.last(notifications);
+            last.type.should.not.equal('BalanceUpdated');
+            next();
+          });
+        },
+      ], function(err) {
+        should.not.exist(err);
+        done();
+      });
+    });
+
+    it('should not perform 2 steps when nb of addresses below threshold', function(done) {
+      var oldAddrs, newAddrs;
+      Defaults.TWO_STEP_BALANCE_THRESHOLD = 5;
+
+      async.series([
+
+        function(next) {
+          helpers.createAddresses(server, wallet, 2, 0, function(addrs) {
+            oldAddrs = addrs;
+            next();
+          });
+        },
+        function(next) {
+          clock.tick(7 * 24 * 3600 * 1000);
+          helpers.createAddresses(server, wallet, 2, 0, function(addrs) {
+            newAddrs = addrs;
+            helpers.stubUtxos(server, wallet, [1, 2], {
+              addresses: [oldAddrs[0], newAddrs[0]],
+            }, function() {
+              next();
+            });
+          });
+        },
+        function(next) {
+          server.getBalance({
+            twoStep: true
+          }, function(err, balance) {
+            should.not.exist(err);
+            should.exist(balance);
+            balance.totalAmount.should.equal(helpers.toSatoshi(3));
+            next();
+          });
+        },
+        function(next) {
+          setTimeout(next, 100);
+        },
+        function(next) {
+          server.getNotifications({}, function(err, notifications) {
+            should.not.exist(err);
+            var last = _.last(notifications);
+            last.type.should.not.equal('BalanceUpdated');
+            next();
+          });
+        },
+      ], function(err) {
+        should.not.exist(err);
+        done();
+      });
+    });
+  });
+
   describe('#getFeeLevels', function() {
     var server, wallet, levels;
     before(function() {
@@ -3936,6 +4245,42 @@ describe('Wallet service', function() {
         });
       });
     });
+    it('should correctly handle change in tx history', function(done) {
+      server._normalizeTxHistory = sinon.stub().returnsArg(0);
+      helpers.stubUtxos(server, wallet, 2, function() {
+        var txs = [{
+          txid: '1',
+          confirmations: 1,
+          fees: 150,
+          time: Date.now() / 1000,
+          inputs: [{
+            address: firstAddress.address,
+            amount: 550,
+          }],
+          outputs: [{
+            address: firstAddress.address,
+            amount: 100,
+          }, {
+            address: 'external',
+            amount: 300,
+          }],
+        }];
+        helpers.stubHistory(txs);
+        server.getTxHistory({}, function(err, txs) {
+          should.not.exist(err);
+          should.exist(txs);
+          txs.length.should.equal(1);
+          var tx = txs[0];
+          tx.action.should.equal('sent');
+          tx.amount.should.equal(300);
+          tx.fees.should.equal(150);
+          tx.outputs.length.should.equal(1);
+          tx.outputs[0].address.should.equal('external');
+          tx.outputs[0].amount.should.equal(300);
+          done();
+        });
+      });
+    });
   });
 
 
@@ -5619,7 +5964,7 @@ describe('Wallet service', function() {
         txid: '1',
         confirmations: 1,
         fees: 100,
-        time: 1,
+        time: 12345,
         inputs: [{
           address: mainAddresses[0].address,
           amount: 500,
@@ -5638,7 +5983,7 @@ describe('Wallet service', function() {
         tx.action.should.equal('sent');
         tx.amount.should.equal(400);
         tx.fees.should.equal(100);
-        tx.time.should.equal(1);
+        tx.time.should.equal(12345);
         done();
       });
     });
@@ -5648,7 +5993,7 @@ describe('Wallet service', function() {
         txid: '1',
         confirmations: 1,
         fees: 100,
-        time: 1,
+        time: Date.now() / 1000,
         inputs: [{
           address: mainAddresses[0].address,
           amount: 500,
@@ -5715,7 +6060,7 @@ describe('Wallet service', function() {
                 txid: txp.txid,
                 confirmations: 1,
                 fees: 5460,
-                time: 1,
+                time: Date.now() / 1000,
                 inputs: [{
                   address: tx.inputs[0].address,
                   amount: utxos[0].satoshis,
