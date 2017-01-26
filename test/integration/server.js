@@ -23,7 +23,7 @@ var WalletService = require('../../lib/server');
 
 var TestData = require('../testdata');
 var helpers = require('./helpers');
-var storage, blockchainExplorer, request;
+var storage, blockchainExplorer, addressService, request;
 
 
 describe('Wallet service', function() {
@@ -34,6 +34,7 @@ describe('Wallet service', function() {
     helpers.beforeEach(function(res) {
       storage = res.storage;
       blockchainExplorer = res.blockchainExplorer;
+      addressService = res.addressService;
       request = res.request;
       done();
     });
@@ -254,13 +255,19 @@ describe('Wallet service', function() {
         n: 3,
         pubKey: TestData.keyPair.pub,
       };
+      addressService.createGroup = sinon.stub().yields(null, '123');
       server.createWallet(opts, function(err, walletId) {
         should.not.exist(err);
         server.storage.fetchWallet(walletId, function(err, wallet) {
           should.not.exist(err);
           wallet.id.should.equal(walletId);
           wallet.name.should.equal('my wallet');
-          done();
+          setTimeout(function() {
+            server.storage.fetchWallet(walletId, function(err, wallet) {
+              wallet.addressServiceId.should.equal('123');
+              done();
+            });
+          });
         });
       });
     });

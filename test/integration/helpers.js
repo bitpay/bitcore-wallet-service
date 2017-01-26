@@ -24,7 +24,7 @@ var Model = require('../../lib/model');
 var WalletService = require('../../lib/server');
 var TestData = require('../testdata');
 
-var storage, blockchainExplorer;
+var storage, blockchainExplorer, addressService;
 
 var useMongoDb = !!process.env.USE_MONGO_DB;
 
@@ -58,9 +58,13 @@ helpers.beforeEach = function(cb) {
   storage.db.dropDatabase(function(err) {
     if (err) return cb(err);
     blockchainExplorer = sinon.stub();
+    addressService = sinon.stub();
+    addressService.createGroup = sinon.stub().yields(null, '123');
+    addressService.addAddress = sinon.stub().yields();
     var opts = {
       storage: storage,
       blockchainExplorer: blockchainExplorer,
+      addressService: addressService,
       request: sinon.stub()
     };
     WalletService.initialize(opts, function() {
