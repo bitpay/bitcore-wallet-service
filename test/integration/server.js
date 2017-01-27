@@ -1566,7 +1566,7 @@ describe('Wallet service', function() {
         });
       });
     });
-    it('should get UTXOs for specific addresses', function(done) {
+    it('should not support getting UTXOs for specific addresses', function(done) {
       helpers.stubUtxos(server, wallet, [1, 2, 3], function(utxos) {
         _.uniq(utxos, 'address').length.should.be.above(1);
         var address = utxos[0].address;
@@ -1576,15 +1576,15 @@ describe('Wallet service', function() {
         server.getUtxos({
           addresses: [address]
         }, function(err, utxos) {
-          should.not.exist(err);
-          should.exist(utxos);
-          _.sum(utxos, 'satoshis').should.equal(amount);
+          should.exist(err);
+          should.not.exist(utxos);
+          err.code.should.equal('DEPRECATED');
           done();
         });
       });
     });
     it('should not fail when getting UTXOs for wallet with 0 UTXOs and pending txps', function(done) {
-      helpers.stubUtxos(server, wallet, [1, 1], function() {
+      helpers.stubUtxos(server, wallet, [1, 1], function(xxx) {
         var txOpts = {
           outputs: [{
             toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
@@ -1593,10 +1593,7 @@ describe('Wallet service', function() {
           feePerKb: 100e2,
         };
         helpers.createAndPublishTx(server, txOpts, TestData.copayers[0].privKey_1H_0, function(txp) {
-          blockchainExplorer.getUtxos = function(addresses, cb) {
-            return cb(null, []);
-          };
-
+          addressService.getUtxos = sinon.stub().callsArgWith(1, null, []);
           server.getUtxos({}, function(err, utxos) {
             should.not.exist(err);
             utxos.should.be.empty;
@@ -1777,11 +1774,12 @@ describe('Wallet service', function() {
       });
     });
 
-    it.only('should get balance', function(done) {
-      helpers.stubUtxos2(server, wallet, [1, 'u2', 3], function() {
+    it('should get balance', function(done) {
+      helpers.stubUtxos(server, wallet, [1, 'u2', 3], function() {
         server.getBalance({}, function(err, balance) {
           should.not.exist(err);
           should.exist(balance);
+
           balance.totalAmount.should.equal(helpers.toSatoshi(6));
           balance.lockedAmount.should.equal(0);
           balance.availableAmount.should.equal(helpers.toSatoshi(6));
@@ -1817,7 +1815,6 @@ describe('Wallet service', function() {
       });
     });
     it('should get balance when there are no funds', function(done) {
-      blockchainExplorer.getUtxos = sinon.stub().callsArgWith(1, null, []);
       server.createAddress({}, function(err, address) {
         should.not.exist(err);
         server.getBalance({}, function(err, balance) {
@@ -1847,7 +1844,7 @@ describe('Wallet service', function() {
       });
     });
     it('should fail gracefully when blockchain is unreachable', function(done) {
-      blockchainExplorer.getUtxos = sinon.stub().callsArgWith(1, 'dummy error');
+      addressService.getUtxos = sinon.stub().callsArgWith(1, 'dummy error');
       server.createAddress({}, function(err, address) {
         should.not.exist(err);
         server.getBalance({}, function(err, balance) {
@@ -2711,7 +2708,7 @@ describe('Wallet service', function() {
         });
       });
       it('should fail gracefully if unable to reach the blockchain', function(done) {
-        blockchainExplorer.getUtxos = sinon.stub().callsArgWith(1, 'dummy error');
+        addressService.getUtxos = sinon.stub().callsArgWith(1, 'dummy error');
         server.createAddress({}, function(err, address) {
           should.not.exist(err);
           var txOpts = {

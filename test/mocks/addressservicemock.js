@@ -1,4 +1,5 @@
 var _ = require('lodash');
+var $ = require('preconditions').singleton();
 var Uuid = require('uuid');
 
 function AddressServiceMock() {
@@ -13,15 +14,18 @@ AddressServiceMock.prototype.createGroup = function(cb) {
 };
 
 AddressServiceMock.prototype.addAddresses = function(groupId, addresses, cb) {
-  $.checkArgument(this.groups[groupId]);
+  $.checkArgument(this.addresses[groupId]);
   this.addresses[groupId] = this.addresses[groupId].concat(addresses);
+
   return cb();
 };
 
 AddressServiceMock.prototype.getUtxos = function(groupId, cb) {
   var self = this;
+
+  var index = _.indexBy(self.addresses[groupId]);
   return cb(null, _.filter(self.utxos, function(utxo) {
-    return _.contains(_.keys(self.addresses[groupId]), utxo.address);
+    return !!index[utxo.address];
   }));
 };
 

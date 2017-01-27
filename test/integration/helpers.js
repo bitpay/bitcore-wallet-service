@@ -306,12 +306,7 @@ helpers.stubUtxos = function(server, wallet, amounts, opts, cb) {
         helpers._utxos = utxos;
       }
 
-      blockchainExplorer.getUtxos = function(addresses, cb) {
-        var selected = _.filter(helpers._utxos, function(utxo) {
-          return _.contains(addresses, utxo.address);
-        });
-        return cb(null, selected);
-      };
+      addressService._setUtxos(helpers._utxos);
 
       return next();
     },
