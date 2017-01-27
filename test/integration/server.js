@@ -262,6 +262,24 @@ describe('Wallet service', function() {
           should.not.exist(err);
           wallet.id.should.equal(walletId);
           wallet.name.should.equal('my wallet');
+          done();
+        });
+      });
+    });
+
+    it('should register wallet in address service', function(done) {
+      var opts = {
+        name: 'my wallet',
+        m: 2,
+        n: 3,
+        pubKey: TestData.keyPair.pub,
+      };
+      addressService.createGroup = sinon.stub().yields(null, '123');
+      server.createWallet(opts, function(err, walletId) {
+        should.not.exist(err);
+        server.storage.fetchWallet(walletId, function(err, wallet) {
+          should.not.exist(err);
+          wallet.id.should.equal(walletId);
           setTimeout(function() {
             server.storage.fetchWallet(walletId, function(err, wallet) {
               wallet.addressServiceId.should.equal('123');
@@ -1759,8 +1777,8 @@ describe('Wallet service', function() {
       });
     });
 
-    it('should get balance', function(done) {
-      helpers.stubUtxos(server, wallet, [1, 'u2', 3], function() {
+    it.only('should get balance', function(done) {
+      helpers.stubUtxos2(server, wallet, [1, 'u2', 3], function() {
         server.getBalance({}, function(err, balance) {
           should.not.exist(err);
           should.exist(balance);
@@ -1785,6 +1803,7 @@ describe('Wallet service', function() {
         });
       });
     });
+
     it('should get balance when there are no addresses', function(done) {
       server.getBalance({}, function(err, balance) {
         should.not.exist(err);
