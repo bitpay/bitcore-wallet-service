@@ -1,6 +1,7 @@
 'use strict';
 
 var _ = require('lodash');
+var $ = require('preconditions').singleton();
 var async = require('async');
 
 var chai = require('chai');
@@ -11,13 +12,14 @@ log.debug = log.verbose;
 var tingodb = require('tingodb')({
   memStore: true
 });
-
 var Bitcore = require('bitcore-lib');
 
 var Common = require('../../lib/common');
 var Utils = Common.Utils;
 var Constants = Common.Constants;
 var Defaults = Common.Defaults;
+
+var AddressServiceMock = require('../mocks/addressservicemock');
 
 var Storage = require('../../lib/storage');
 var Model = require('../../lib/model');
@@ -58,9 +60,7 @@ helpers.beforeEach = function(cb) {
   storage.db.dropDatabase(function(err) {
     if (err) return cb(err);
     blockchainExplorer = sinon.stub();
-    addressService = sinon.stub();
-    addressService.createGroup = sinon.stub().yields(null, '123');
-    addressService.addAddress = sinon.stub().yields();
+    addressService = new AddressServiceMock();
     var opts = {
       storage: storage,
       blockchainExplorer: blockchainExplorer,
