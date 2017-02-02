@@ -3770,38 +3770,26 @@ describe('Wallet service', function() {
     });
     it('should include the note in tx history listing', function(done) {
       helpers.createAddresses(server, wallet, 1, 1, function(mainAddresses, changeAddress) {
-        blockchainExplorer.getBlockchainHeight = sinon.stub().callsArgWith(0, null, 1000);
-        server._normalizeTxHistory = sinon.stub().returnsArg(0);
-        var txs = [{
-          txid: '123',
-          confirmations: 1,
-          fees: 100,
-          time: 20,
-          inputs: [{
-            address: 'external',
-            amount: 500,
-          }],
-          outputs: [{
-            address: mainAddresses[0].address,
-            amount: 200,
-          }],
-        }];
-        helpers.stubHistory(txs);
-        server.editTxNote({
-          txid: '123',
-          body: 'just some note'
-        }, function(err) {
-          should.not.exist(err);
-          server.getTxHistory({}, function(err, txs) {
+        helpers.generateTxHistory(server, wallet, {
+          outgoing: 1
+        }, function(txs) {
+          helpers.stubHistory(txs);
+          server.editTxNote({
+            txid: txs[0].txid,
+            body: 'just some note'
+          }, function(err) {
             should.not.exist(err);
-            should.exist(txs);
-            txs.length.should.equal(1);
-            var tx = txs[0];
-            should.exist(tx.note);
-            tx.note.body.should.equal('just some note');
-            tx.note.editedBy.should.equal(server.copayerId);
-            should.exist(tx.note.editedOn);
-            done();
+            server.getTxHistory({}, function(err, txs) {
+              should.not.exist(err);
+              should.exist(txs);
+              txs.length.should.equal(1);
+              var tx = txs[0];
+              should.exist(tx.note);
+              tx.note.body.should.equal('just some note');
+              tx.note.editedBy.should.equal(server.copayerId);
+              should.exist(tx.note.editedOn);
+              done();
+            });
           });
         });
       });
@@ -5623,7 +5611,7 @@ describe('Wallet service', function() {
   });
 
   describe('#getTxHistory', function() {
-    var server, wallet, mainAddresses, changeAddresses;
+    var server, wallet, mainAddresses, changeAddresses, allAddressStrs;
     beforeEach(function(done) {
       blockchainExplorer.getBlockchainHeight = sinon.stub().callsArgWith(0, null, 1000);
       helpers.createAndJoinWallet(1, 1, function(s, w) {
@@ -5632,118 +5620,66 @@ describe('Wallet service', function() {
         helpers.createAddresses(server, wallet, 1, 1, function(main, change) {
           mainAddresses = main;
           changeAddresses = change;
+          allAddressStrs = _.pluck(_.flatten([main, change]), 'address');
           done();
         });
       });
     });
 
-    it('should get tx history from insight', function(done) {
-      helpers.stubHistory(TestData.history);
-      server.getTxHistory({}, function(err, txs) {
-        should.not.exist(err);
-        should.exist(txs);
-        txs.length.should.equal(TestData.history.length);
-        var i = 0;
-        _.each(txs, function(tx) {
-          var h = TestData.history[i++];
-          tx.time.should.equal(h.confirmations ? h.blocktime : h.firstSeenTs);
+    it('should get tx history from address service', function(done) {
+      helpers.generateTxHistory(server, wallet, {
+        incoming: 2,
+        outgoing: 1,
+      }, function(txs) {
+        helpers.stubHistory(txs);
+        server.getTxHistory({}, function(err, txs) {
+          should.not.exist(err);
+          should.exist(txs);
+          txs.length.should.equal(3);
+          done();
         });
-        done();
       });
     });
 
     it('should get tx history for incoming txs', function(done) {
-      server._normalizeTxHistory = sinon.stub().returnsArg(0);
-      var txs = [{
-        txid: '1',
-        confirmations: 1,
-        fees: 100,
-        time: 20,
-        inputs: [{
-          address: 'external',
-          amount: 500,
-        }],
-        outputs: [{
-          address: mainAddresses[0].address,
-          amount: 200,
-        }],
-      }];
-      helpers.stubHistory(txs);
-      server.getTxHistory({}, function(err, txs) {
-        should.not.exist(err);
-        should.exist(txs);
-        txs.length.should.equal(1);
-        var tx = txs[0];
-        tx.action.should.equal('received');
-        tx.amount.should.equal(200);
-        tx.fees.should.equal(100);
-        tx.time.should.equal(20);
-        done();
+      helpers.generateTxHistory(server, wallet, {
+        incoming: 1,
+      }, function(txs) {
+        helpers.stubHistory(txs);
+        var rawTx = txs[0];
+        server.getTxHistory({}, function(err, txs) {
+          should.not.exist(err);
+          should.exist(txs);
+          txs.length.should.equal(1);
+          var tx = txs[0];
+          tx.action.should.equal('received');
+          tx.amount.should.equal(rawTx._meta.amount);
+          tx.fees.should.equal(rawTx._meta.fee);
+          tx.time.should.equal(rawTx.firstSeenTs);
+          done();
+        });
       });
     });
     it('should get tx history for outgoing txs', function(done) {
-      server._normalizeTxHistory = sinon.stub().returnsArg(0);
-      var txs = [{
-        txid: '1',
-        confirmations: 1,
-        fees: 100,
-        time: 12345,
-        inputs: [{
-          address: mainAddresses[0].address,
-          amount: 500,
-        }],
-        outputs: [{
-          address: 'external',
-          amount: 400,
-        }],
-      }];
-      helpers.stubHistory(txs);
-      server.getTxHistory({}, function(err, txs) {
-        should.not.exist(err);
-        should.exist(txs);
-        txs.length.should.equal(1);
-        var tx = txs[0];
-        tx.action.should.equal('sent');
-        tx.amount.should.equal(400);
-        tx.fees.should.equal(100);
-        tx.time.should.equal(12345);
-        done();
+      helpers.generateTxHistory(server, wallet, {
+        outgoing: 1,
+      }, function(txs) {
+        helpers.stubHistory(txs);
+        var rawTx = txs[0];
+        server.getTxHistory({}, function(err, txs) {
+          should.not.exist(err);
+          should.exist(txs);
+          txs.length.should.equal(1);
+          var tx = txs[0];
+          tx.action.should.equal('sent');
+          tx.amount.should.equal(rawTx._meta.amount);
+          tx.fees.should.equal(rawTx._meta.fee);
+          tx.time.should.equal(rawTx.firstSeenTs);
+          done();
+        });
       });
     });
-    it('should get tx history for outgoing txs + change', function(done) {
-      server._normalizeTxHistory = sinon.stub().returnsArg(0);
-      var txs = [{
-        txid: '1',
-        confirmations: 1,
-        fees: 100,
-        time: Date.now() / 1000,
-        inputs: [{
-          address: mainAddresses[0].address,
-          amount: 500,
-        }],
-        outputs: [{
-          address: 'external',
-          amount: 300,
-        }, {
-          address: changeAddresses[0].address,
-          amount: 100,
-        }],
-      }];
-      helpers.stubHistory(txs);
-      server.getTxHistory({}, function(err, txs) {
-        should.not.exist(err);
-        should.exist(txs);
-        txs.length.should.equal(1);
-        var tx = txs[0];
-        tx.action.should.equal('sent');
-        tx.amount.should.equal(300);
-        tx.fees.should.equal(100);
-        tx.outputs[0].address.should.equal('external');
-        tx.outputs[0].amount.should.equal(300);
-        done();
-      });
-    });
-    it('should get tx history with accepted proposal', function(done) {
+    it.only('should get tx history with accepted proposal', function(done) {
       server._normalizeTxHistory = sinon.stub().returnsArg(0);
       var external = '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7';
 
