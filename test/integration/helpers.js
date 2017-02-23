@@ -421,11 +421,12 @@ helpers.generateTxHistory = function(server, wallet, opts, cb) {
     txs.push(_.map(_.range(opts.incoming), function() {
       return getTx('incoming');
     }));
+
     txs.push(_.map(_.range(opts.outgoing), function() {
       return getTx('outgoing');
     }));
 
-    return cb(_.flatten(txs));
+    return cb(_.compact(_.flatten(txs)));
   });
 };
 

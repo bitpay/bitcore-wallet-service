@@ -3957,26 +3957,29 @@ describe('Wallet service', function() {
       });
     });
     it('should correctly handle change in tx history', function(done) {
-      server._normalizeTxHistory = sinon.stub().returnsArg(0);
       helpers.stubUtxos(server, wallet, 2, function() {
-        var txs = [{
+        var history = [{
           txid: '1',
           confirmations: 1,
-          fees: 150,
-          time: Date.now() / 1000,
-          inputs: [{
-            address: firstAddress.address,
-            amount: 550,
+          fees: 150e-8,
+          blocktime: Date.now() / 1000,
+          vin: [{
+            addr: firstAddress.address,
+            valueSat: 550,
           }],
-          outputs: [{
-            address: firstAddress.address,
-            amount: 100,
+          vout: [{
+            scriptPubKey: {
+              addresses: [firstAddress.address]
+            },
+            value: 100e-8,
           }, {
-            address: 'external',
-            amount: 300,
+            scriptPubKey: {
+              addresses: ['external']
+            },
+            value: 300e-8,
           }],
         }];
-        helpers.stubHistory(txs);
+        helpers.stubHistory(history);
         server.getTxHistory({}, function(err, txs) {
           should.not.exist(err);
           should.exist(txs);
@@ -5679,7 +5682,7 @@ describe('Wallet service', function() {
         });
       });
     });
-    it.only('should get tx history with accepted proposal', function(done) {
+    it('should get tx history with accepted proposal', function(done) {
       var external = '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7';
 
       helpers.stubUtxos(server, wallet, [1, 2], function(utxos) {
@@ -5718,7 +5721,7 @@ describe('Wallet service', function() {
                 txid: txp.txid,
                 confirmations: 1,
                 fees: 5460e-8,
-                time: Date.now() / 1000,
+                blocktime: Date.now() / 1000,
                 vin: [{
                   addr: tx.inputs[0].address,
                   valueSat: 1e8,
@@ -5825,21 +5828,22 @@ describe('Wallet service', function() {
         expected: [],
       }];
 
-      server._normalizeTxHistory = sinon.stub().returnsArg(0);
       var timestamps = [50, 40, 30, 20, 10];
       var txs = _.map(timestamps, function(ts, idx) {
         return {
           txid: (idx + 1).toString(),
           confirmations: ts / 10,
-          fees: 100,
-          time: ts,
-          inputs: [{
-            address: 'external',
-            amount: 500,
+          fees: 100e-8,
+          blocktime: ts,
+          vin: [{
+            addr: 'external',
+            valueSat: 500,
           }],
-          outputs: [{
-            address: mainAddresses[0].address,
-            amount: 200,
+          vout: [{
+            scriptPubKey: {
+              addresses: [mainAddresses[0].address]
+            },
+            value: 200e-8,
           }],
         };
       });
@@ -5855,26 +5859,10 @@ describe('Wallet service', function() {
       }, done);
     });
     it('should fail gracefully if unable to reach the blockchain', function(done) {
-      blockchainExplorer.getTransactions = sinon.stub().callsArgWith(3, 'dummy error');
+      addressService.getTransactions = sinon.stub().callsArgWith(3, 'dummy error');
       server.getTxHistory({}, function(err, txs) {
         should.exist(err);
         err.toString().should.equal('dummy error');
-        done();
-      });
-    });
-    it('should handle invalid tx in  history ', function(done) {
-      var h = _.clone(TestData.history);
-      h.push({
-        txid: 'xx'
-      })
-      helpers.stubHistory(h);
-      var l = TestData.history.length;
-
-      server.getTxHistory({}, function(err, txs) {
-        should.not.exist(err);
-        should.exist(txs);
-        txs.length.should.equal(l + 1);
-        txs[l].action.should.equal('invalid');
         done();
       });
     });
