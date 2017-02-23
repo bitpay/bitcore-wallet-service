@@ -5680,7 +5680,6 @@ describe('Wallet service', function() {
       });
     });
     it.only('should get tx history with accepted proposal', function(done) {
-      server._normalizeTxHistory = sinon.stub().returnsArg(0);
       var external = '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7';
 
       helpers.stubUtxos(server, wallet, [1, 2], function(utxos) {
@@ -5718,21 +5717,27 @@ describe('Wallet service', function() {
               var txs = [{
                 txid: txp.txid,
                 confirmations: 1,
-                fees: 5460,
+                fees: 5460e-8,
                 time: Date.now() / 1000,
-                inputs: [{
-                  address: tx.inputs[0].address,
-                  amount: utxos[0].satoshis,
+                vin: [{
+                  addr: tx.inputs[0].address,
+                  valueSat: 1e8,
                 }],
-                outputs: [{
-                  address: changeAddresses[0].address,
-                  amount: 0.2e8 - 5460,
+                vout: [{
+                  scriptPubKey: {
+                    addresses: [changeAddresses[0].address]
+                  },
+                  value: 0.2 - 5460e-8,
                 }, {
-                  address: external,
-                  amount: 0.5e8,
+                  scriptPubKey: {
+                    addresses: [external]
+                  },
+                  value: 0.5,
                 }, {
-                  address: external,
-                  amount: 0.3e8,
+                  scriptPubKey: {
+                    addresses: [external]
+                  },
+                  value: 0.3,
                 }]
               }];
               helpers.stubHistory(txs);
