@@ -16,6 +16,8 @@ node_js:
 before_install:
   - export CXX="g++-4.8" CC="gcc-4.8"
 install:
+  # When all dependencies declare bitcore-lib as a peerDependency this can be bumped up, but this matches the current version expected by dependencies
+  - npm install bitcore-lib@0.13.7
   - npm install
 after_success:
   - npm run coveralls
