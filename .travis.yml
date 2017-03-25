@@ -17,8 +17,7 @@ before_install:
   - export CXX="g++-4.8" CC="gcc-4.8"
 install:
   # Install peerDependencies on > npm3
-  # When all dependencies declare bitcore-lib as a peerDependency this can be bumped up, but this matches the current ecosystem version expected by dependencies
-  - if [ $(npm --version | sed 's/\..*//g') -ge 3 ]; then npm install bitcore-lib@0.13.7; fi
+  - if [ $(npm --version | sed 's/\..*//g') -ge 3 ]; then npm install bitcore-lib; fi
   - npm install
 after_success:
   - npm run coveralls

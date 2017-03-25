@@ -62,7 +62,7 @@
     "tingodb": "^0.3.4"
   },
   "peerDependencies": {
-    "bitcore-lib": "~0.13.7"
+    "bitcore-lib": "~0.14.0"
   },
   "scripts": {
     "start": "./start.sh",
