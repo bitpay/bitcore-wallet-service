@@ -1,6 +1,7 @@
 'use strict';
 
 var _ = require('lodash');
+var $ = require('preconditions').singleton();
 var async = require('async');
 
 var chai = require('chai');
@@ -11,7 +12,6 @@ log.debug = log.verbose;
 var tingodb = require('tingodb')({
   memStore: true
 });
-
 var Bitcore = require('bitcore-lib');
 
 var Common = require('../../lib/common');
@@ -19,12 +19,14 @@ var Utils = Common.Utils;
 var Constants = Common.Constants;
 var Defaults = Common.Defaults;
 
+var AddressServiceMock = require('../mocks/addressservicemock');
+
 var Storage = require('../../lib/storage');
 var Model = require('../../lib/model');
 var WalletService = require('../../lib/server');
 var TestData = require('../testdata');
 
-var storage, blockchainExplorer;
+var storage, blockchainExplorer, addressService;
 
 var useMongoDb = !!process.env.USE_MONGO_DB;
 
@@ -58,9 +60,11 @@ helpers.beforeEach = function(cb) {
   storage.db.dropDatabase(function(err) {
     if (err) return cb(err);
     blockchainExplorer = sinon.stub();
+    addressService = new AddressServiceMock();
     var opts = {
       storage: storage,
       blockchainExplorer: blockchainExplorer,
+      addressService: addressService,
       request: sinon.stub()
     };
     WalletService.initialize(opts, function() {
@@ -302,12 +306,7 @@ helpers.stubUtxos = function(server, wallet, amounts, opts, cb) {
         helpers._utxos = utxos;
       }
 
-      blockchainExplorer.getUtxos = function(addresses, cb) {
-        var selected = _.filter(helpers._utxos, function(utxo) {
-          return _.contains(addresses, utxo.address);
-        });
-        return cb(null, selected);
-      };
+      addressService._setUtxos(helpers._utxos);
 
       return next();
     },
@@ -323,29 +322,112 @@ helpers.stubBroadcast = function(thirdPartyBroadcast) {
 };
 
 helpers.stubHistory = function(txs) {
-  var totalItems = txs.length;
-  blockchainExplorer.getTransactions = function(addresses, from, to, cb) {
-    var MAX_BATCH_SIZE = 100;
-    var nbTxs = txs.length;
+  addressService._setTransactions(txs);
+};
 
-    if (_.isUndefined(from) && _.isUndefined(to)) {
-      from = 0;
-      to = MAX_BATCH_SIZE;
-    }
-    if (!_.isUndefined(from) && _.isUndefined(to))
-      to = from + MAX_BATCH_SIZE;
+helpers.getRandomAddress = function(network) {
+  return new Bitcore.Address(Bitcore.PrivateKey().publicKey, network || 'livenet').toString()
+};
 
-    if (!_.isUndefined(from) && !_.isUndefined(to) && to - from > MAX_BATCH_SIZE)
-      to = from + MAX_BATCH_SIZE;
+helpers.generateTxHistory = function(server, wallet, opts, cb) {
+  var self = this;
+  opts = opts || {};
 
-    if (from < 0) from = 0;
-    if (to < 0) to = 0;
-    if (from > nbTxs) from = nbTxs;
-    if (to > nbTxs) to = nbTxs;
-
-    var page = txs.slice(from, to);
-    return cb(null, page, totalItems);
+  function getRandomCount(size) {
+    return _.range(_.random(1, size));
   };
+
+  function getRandomAmountSat(from, to) {
+    return +(_.random(from || 10000, to || 1e8).toFixed(8));
+  };
+
+  function getRandomTimestamp(windowSizeInDays) {
+    var now = Math.floor(Date.now() / 1000);
+    var x = (windowSizeInDays || 7) * 24 * 3600;
+    return now + _.random(-x, x);
+  };
+
+  function pickOne(collection) {
+    if (_.isEmpty(collection)) return null;
+    return collection[_.random(0, collection.length - 1)];
+  };
+
+  function toBtc(amountSat) {
+    return +(amountSat / 1e8).toFixed(8);
+  };
+
+  server.storage.fetchAddressStrs(wallet.id, function(err, addressStrs) {
+    if (err) throw err;
+
+    function getInput(fromSelf) {
+      var valueSat = getRandomAmountSat(20000, 1e8);
+      return {
+        txid: helpers.randomTXID(),
+        vout: _.random(0, 10),
+        n: 0,
+        addr: fromSelf ? pickOne(addressStrs) : helpers.getRandomAddress(wallet.network),
+        valueSat: valueSat,
+        value: toBtc(valueSat),
+      };
+    };
+
+    function getOutput(amountSat, toSelf) {
+      return {
+        value: toBtc(amountSat),
+        n: 0,
+        scriptPubKey: {
+          addresses: [
+            toSelf ? pickOne(addressStrs) : helpers.getRandomAddress(wallet.network)
+          ],
+        },
+      };
+    };
+
+    function getTx(type) {
+      var vin = _.map(getRandomCount(3), function() {
+        return getInput(type == 'outgoing');
+      });
+
+      var amountInSat = _.sum(vin, 'valueSat');
+      var toAmountSat = getRandomAmountSat(100, amountInSat - 10000);
+      var fee = getRandomAmountSat(100, 10000);
+      var changeSat = amountInSat - toAmountSat - fee;
+
+      $.checkState(changeSat >= 0);
+
+      var vout = [];
+      vout.push(getOutput(toAmountSat, type == 'incoming'));
+      vout.push(getOutput(changeSat, type == 'outgoing'));
+
+      return {
+        txid: helpers.randomTXID(),
+        confirmations: _.random(0, 100),
+        firstSeenTs: getRandomTimestamp(),
+        valueOut: toBtc(amountInSat - fee),
+        valueIn: toBtc(amountInSat),
+        fees: toBtc(fee),
+        vin: vin,
+        vout: vout,
+        _meta: {
+          type: type,
+          amount: toAmountSat,
+          fee: fee,
+          change: changeSat
+        },
+      };
+    };
+
+    var txs = [];
+    txs.push(_.map(_.range(opts.incoming), function() {
+      return getTx('incoming');
+    }));
+
+    txs.push(_.map(_.range(opts.outgoing), function() {
+      return getTx('outgoing');
+    }));
+
+    return cb(_.compact(_.flatten(txs)));
+  });
 };
 
 helpers.stubFeeLevels = function(levels) {
