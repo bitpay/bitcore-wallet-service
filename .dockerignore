@@ -1,0 +1,4 @@
+.git
+*.md
+!Dockerfile.md
+!installation.md
