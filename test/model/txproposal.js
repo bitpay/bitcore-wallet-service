@@ -73,11 +73,11 @@ describe('TxProposal', function() {
   });
 
   describe('#getRawTx', function() {
-    // it.only('should generate correct raw transaction for signed 1-1', function() {
-    //   var txp = TxProposal.fromObj(testData['2-of-2'].txProposal);
-    //   txp.sign('1', testData['2-of-2'].signatures, testData['2-of-2'].xpub);
-    //   txp.getRawTx().should.equal(testData['2-of-2'].rawTx);
-    // });
+    it.only('should generate correct raw transaction for signed 1-1', function() {
+      var txp = TxProposal.fromObj(testData['1-of-1'].txProposal);
+      txp.sign('1', testData['1-of-1'].signatures, testData['1-of-1'].xpub);
+      txp.getRawTx().should.equal(testData['1-of-1'].rawTx);
+    });
     it('should generate correct raw transaction for signed 2-2', function() {
       var txp = TxProposal.fromObj(testData['2-of-2'].txProposal);
       txp.sign('1', testData['2-of-2'].signatures, testData['2-of-2'].xpub);
@@ -109,6 +109,90 @@ describe('TxProposal', function() {
 });
 
 var testData = {
+  '1-of-1': {
+    xpriv: 'xprv9zWRZ7CXrC4z9xA9RRBFXohmPKbyCajWaCNTHPtwNeJwTnysHG5QK7WMqpNLVtvqGxts7WNcNtqBLfdaFdCGknDPXjLKt2E2BUrPaFDqrLh',
+    xpub: 'xpub6DVmxcjRgZdHNSEcXSiFtweVwMSTc3TMwRJ45nJYvyqvLbK1poPerupqh87rSoz27wvckb1CKnGZoLmLXSZyNGZtVd7neqSvdwJL6fceQpe',
+    signatures: ['30440220515f87bf7538aba97a8b45f1637ee6fc4ba542c9f1d013a5b1f47517451f237802207317bfc077a7916eed7bad651a89fb5426350123e3a3820a66ceb78341cbdd5d',
+      '3045022100c16c44f309727cde583332af92194f1565aa43fae8e4d59b2a3dd3545ee0de5802201f1acd48a057a06eaea413aad3f342225c7243e1623e194e6face53c88681742'
+    ],
+    rawTx: '0100000002c65819fc97aa0f9a1199e6364f4e5758b2fb322d0f6ed087314f491122762a63030000006a4730440220515f87bf7538aba97a8b45f1637ee6fc4ba542c9f1d013a5b1f47517451f237802207317bfc077a7916eed7bad651a89fb5426350123e3a3820a66ceb78341cbdd5d012103e00bb0cb0fdf50489df10dbeb0004c5262f44d1cfafaf340772edf9aa54c522fffffffff3b784f20b5a97f29fdd5237b614ae697f98d306f7d80ab24d978fed218da3a07040000006b483045022100c16c44f309727cde583332af92194f1565aa43fae8e4d59b2a3dd3545ee0de5802201f1acd48a057a06eaea413aad3f342225c7243e1623e194e6face53c88681742012103e00bb0cb0fdf50489df10dbeb0004c5262f44d1cfafaf340772edf9aa54c522fffffffff0280b2e60e000000001976a91451224bca38efcaa31d5340917c3f3f713b8b20e488ac44e1fa02000000001976a9149edd2399faccf4e57df08bef78962fa0228741cf88ac00000000',
+    creationArgs: {
+      outputs: [{
+        toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
+        amount: 2.5e8,
+      }],
+      feePerKb: 100e2,
+    },
+    txProposal: {
+      version: 3,
+      createdOn: 1493743924,
+      id: '532695ad-5b33-4966-895f-9c2fb230bfae',
+      walletId: '8fcd7dcc-08e3-4e49-a55a-34122e4c6df0',
+      creatorId: '626452e5e0e35df4d9ae4d3e60653c9ae9a814f00c84dc40f5887069b18e2110',
+      network: 'livenet',
+      outputs: [{
+        amount: 250000000,
+        toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7'
+      }],
+      amount: 250000000,
+      message: undefined,
+      payProUrl: undefined,
+      changeAddress: {
+        version: '1.0.0',
+        createdOn: 1493743924,
+        address: '1FUzgKcyPJsYwDLUEVJYeE2N3KVaoxTjGS',
+        walletId: '8fcd7dcc-08e3-4e49-a55a-34122e4c6df0',
+        isChange: true,
+        path: 'm/1/0',
+        publicKeys: ['02129acdcc600694b3ce55a2d05244186e806174eb0bafde20e5a6395ded647857'],
+        network: 'livenet',
+        type: 'P2PKH',
+      },
+      inputs: [{
+        txid: '632a762211494f3187d06e0f2d32fbb258574e4f36e699119a0faa97fc1958c6',
+        vout: 3,
+        address: '1L3z9LPd861FWQhf3vDn89Fnc9dkdBo2CG',
+        scriptPubKey: '76a914d0faec47bebd22b7168a6298c3b4d3d7dc84fe2088ac',
+        satoshis: 200000000,
+        confirmations: 79,
+        locked: false,
+        path: 'm/0/0',
+        publicKeys: ['03e00bb0cb0fdf50489df10dbeb0004c5262f44d1cfafaf340772edf9aa54c522f']
+      }, {
+        txid: '073ada18d2fe78d924ab807d6f308df997e64a617b23d5fd297fa9b5204f783b',
+        vout: 4,
+        address: '1L3z9LPd861FWQhf3vDn89Fnc9dkdBo2CG',
+        scriptPubKey: '76a914d0faec47bebd22b7168a6298c3b4d3d7dc84fe2088ac',
+        satoshis: 100000000,
+        confirmations: 92,
+        locked: false,
+        path: 'm/0/0',
+        publicKeys: ['03e00bb0cb0fdf50489df10dbeb0004c5262f44d1cfafaf340772edf9aa54c522f']
+      }],
+      walletM: 1,
+      walletN: 1,
+      requiredSignatures: 1,
+      requiredRejections: 1,
+      status: 'pending',
+      txid: undefined,
+      broadcastedOn: undefined,
+      inputPaths: ['m/0/0', 'm/0/0'],
+      actions: [],
+      outputOrder: [0, 1],
+      fee: 3900,
+      feeLevel: undefined,
+      feePerKb: 10000,
+      excludeUnconfirmedUtxos: false,
+      addressType: 'P2PKH',
+      customData: undefined,
+      proposalSignature: '3045022100fd0b595a4db353a1d90fafa3356d93fbdd1aae680ffc463d3b33e3b473f66aa6022077271084b09f8e7bcc92aceb2ae01cdc1bb1d071ada79a70e160ee761bf0cb8d',
+      proposalSignaturePubKey: undefined,
+      proposalSignaturePubKeySig: undefined,
+      derivationStrategy: 'BIP44',
+      creatorName: 'copayer 1',
+      deleteLockTime: 0
+    },
+  },
   '2-of-2': {
     xpriv: 'xprv9s21ZrQH143K2rMHbXTJmWTuFx6ssqn1vyRoZqPkCXYchBSkp5ey8kMJe84sxfXq5uChWH4gk94rWbXZt2opN9kg4ufKGvUM7HQSLjnoh7e',
     xpub: 'xpub661MyMwAqRbcFLRkhYzK8eQdoywNHJVsJCMQNDoMks5bZymuMcyDgYfnVQYq2Q9npnVmdTAthYGc3N3uxm5sEdnTpSqBc4YYTAhNnoSxCm9',
