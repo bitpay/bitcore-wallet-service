@@ -27,7 +27,15 @@ describe('TxProposal', function() {
   });
 
   describe('#getBitcoreTx', function() {
-    it('should create a valid bitcore TX', function() {
+    it.only('should create a valid bcoin TX 1-of-1', function() {
+      var txp = TxProposal.fromObj(testData['1-of-1'].txProposal);
+      var t1 = txp.getBitcoreTx();
+      var t2 = txp.getBcoinTx();
+      var raw1 = t1.uncheckedSerialize();
+      var raw2 = t2.toRaw().toString('hex');
+      raw1.should.equal(raw2);
+    });
+    it('should create a valid bitcore TX 2-of-2', function() {
       var txp = TxProposal.fromObj(testData['2-of-2'].txProposal);
       var t = txp.getBitcoreTx();
       should.exist(t);
@@ -73,7 +81,7 @@ describe('TxProposal', function() {
   });
 
   describe('#getRawTx', function() {
-    it.only('should generate correct raw transaction for signed 1-1', function() {
+    it('should generate correct raw transaction for signed 1-1', function() {
       var txp = TxProposal.fromObj(testData['1-of-1'].txProposal);
       txp.sign('1', testData['1-of-1'].signatures, testData['1-of-1'].xpub);
       txp.getRawTx().should.equal(testData['1-of-1'].rawTx);
@@ -131,10 +139,10 @@ var testData = {
       creatorId: '626452e5e0e35df4d9ae4d3e60653c9ae9a814f00c84dc40f5887069b18e2110',
       network: 'livenet',
       outputs: [{
-        amount: 250000000,
+        amount: 2.5e8,
         toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7'
       }],
-      amount: 250000000,
+      amount: 2.5e8,
       message: undefined,
       payProUrl: undefined,
       changeAddress: {
