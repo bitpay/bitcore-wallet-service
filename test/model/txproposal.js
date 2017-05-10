@@ -27,12 +27,24 @@ describe('TxProposal', function() {
   });
 
   describe('#getBitcoreTx', function() {
-    it.only('should create a valid bcoin TX 1-of-1', function() {
+    it('should create a valid bcoin TX 1-of-1', function() {
       var txp = TxProposal.fromObj(testData['1-of-1'].txProposal);
       var t1 = txp.getBitcoreTx();
       var t2 = txp.getBcoinTx();
       var raw1 = t1.uncheckedSerialize();
       var raw2 = t2.toRaw().toString('hex');
+      raw1.should.equal(raw2);
+    });
+    it.only('should create a valid bcoin TX 2-of-2', function() {
+      var txp = TxProposal.fromObj(testData['2-of-2'].txProposal);
+      var t1 = txp.getBitcoreTx();
+      var t2 = txp.getBcoinTx();
+      var raw1 = t1.uncheckedSerialize();
+      var raw2 = t2.toRaw().toString('hex');
+      console.log('*** [txproposal.js ln44] t1:', t1.toObject()); // TODO
+      console.log('*** [txproposal.js ln45] t2:', t2); // TODO
+
+
       raw1.should.equal(raw2);
     });
     it('should create a valid bitcore TX 2-of-2', function() {
