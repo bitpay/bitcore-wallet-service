@@ -13,16 +13,16 @@ Bitcore Wallet Service facilitates multisig HD wallets creation and operation th
 
 BWS can usually be installed within minutes and accommodates all the needed infrastructure for peers in a multisig wallet to communicate and operate – with minimum server trust.
   
-See [Bitcore-wallet-client] (https://github.com/bitpay/bitcore-wallet-client) for the *official* client library that communicates to BWS and verifies its response. Also check [Bitcore-wallet] (https://github.com/bitpay/bitcore-wallet) for a simple CLI wallet implementation that relays on BWS.
+See [Bitcore-wallet-client](https://github.com/bitpay/bitcore-wallet-client) for the *official* client library that communicates to BWS and verifies its response. Also check [Bitcore-wallet](https://github.com/bitpay/bitcore-wallet) for a simple CLI wallet implementation that relays on BWS.
 
-BWS is been used in production enviroments for [Copay Wallet](https//copay.io), [Bitpay App wallet](https://bitpay.com/wallet) and others.  
+BWS is been used in production enviroments for [Copay Wallet](https://copay.io), [Bitpay App wallet](https://bitpay.com/wallet) and others.  
 
 More about BWS at https://blog.bitpay.com/announcing-the-bitcore-wallet-suite/
 
-# Install
+# Getting Started
 ```
- npm install bitcore-wallet-service
- npm start
+ git clone https://github.com/bitpay/bitcore-wallet-service.git
+ cd bitcore-wallet-service && npm start
 ```
 
 This will launch the BWS service (with default settings) at `http://localhost:3232/bws/api`.
@@ -101,6 +101,18 @@ Returns:
  * availableConfirmedAmount: Same as availableAmount for confirmed UTXOs only.
  * byAddress array ['address', 'path', 'amount']: A list of addresses holding funds.
  * totalKbToSendMax: An estimation of the number of KiB required to include all available UTXOs in a tx (including unconfirmed).
+
+`/v1/txnotes/:txid`:  Get user notes associated to the specified transaction.
+Returns:
+ * The note associated to the `txid` as a string.
+
+`/v1/fiatrates/:code`:  Get the fiat rate for the specified ISO 4217 code.
+Optional Arguments:
+ * provider: An identifier representing the source of the rates.
+ * ts: The timestamp for the fiat rate (defaults to now).
+
+Returns:
+ * The fiat exchange rate.
  
 ## POST Endpoints
 `/v1/wallets/`: Create a new Wallet
@@ -117,6 +129,7 @@ Returns:
 
 
 `/v1/wallets/:id/copayers/`: Join a Wallet in creation
+
 Required Arguments:
  * walletId: Id of the wallet to join
  * name: Copayer Name
@@ -129,6 +142,7 @@ Returns:
  * wallet: Object with wallet's information
 
 `/v1/txproposals/`: Add a new transaction proposal
+
 Required Arguments:
  * toAddress: RCPT Bitcoin address.
  * amount: amount (in satoshis) of the mount proposed to be transfered
@@ -170,20 +184,24 @@ Returns:
  Optional Arguments:
  * includeCopayerBranches: Scan all copayer branches following BIP45 recommendation (defaults to false). 
 
-  
+`/v1/txconfirmations/`: Subscribe to receive push notifications when the specified transaction gets confirmed.
+Required Arguments:
+ * txid:  The transaction to subscribe to.
+
+## PUT Endpoints
+`/v1/txnotes/:txid/`: Modify a note for a tx.
+
+
 ## DELETE Endpoints
 `/v1/txproposals/:id/`: Deletes a transaction proposal. Only the creator can delete a TX Proposal, and only if it has no other signatures or rejections
 
  Returns:
  * TX Proposal object. (see [fields on the source code](https://github.com/bitpay/bitcore-wallet-service/blob/master/lib/model/txproposal.js)). `.id` is probably needed in this case.
+
+`/v1/txconfirmations/:txid`: Unsubscribe from transaction `txid` and no longer listen to its confirmation.
+
    
 # Push Notifications
-## Installation
-
-  In order to use push notifications service, you need install:
-  
-  * [node-pushserver](https://www.npmjs.com/package/node-pushserver)
-
   Recomended to complete config.js file:
   
   * [GCM documentation to get your API key](https://developers.google.com/cloud-messaging/gcm)
@@ -195,7 +213,7 @@ Returns:
 
 
 ## DELETE Endopints
-`/v1/pushnotifications/subscriptions/`: Remove subscriptions for push notifications service from database.
+`/v2/pushnotifications/subscriptions/`: Remove subscriptions for push notifications service from database.
 
  
 
