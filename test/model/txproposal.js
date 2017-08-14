@@ -6,6 +6,7 @@ var sinon = require('sinon');
 var should = chai.should();
 var TxProposal = require('../../lib/model/txproposal');
 var Bitcore = require('bitcore-lib');
+var Constants = require('../../lib/common/constants');
 
 describe('TxProposal', function() {
   describe('#create', function() {
@@ -14,7 +15,7 @@ describe('TxProposal', function() {
       should.exist(txp);
       txp.outputs.length.should.equal(2);
       txp.amount.should.equal(30000000);
-      txp.network.should.equal('livenet');
+      txp.network.should.equal(Constants.LIVENET);
     });
   });
 
