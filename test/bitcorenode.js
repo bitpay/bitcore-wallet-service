@@ -117,7 +117,6 @@ describe('Bitcore Node Service', function() {
       var config = service._getConfiguration();
       config.blockchainExplorerOpts['insight']['livenet/btc'].should.deep.equal({
         'apiPrefix': '/insight-api',
-        'provider': 'insight',
         'url': 'http://localhost:3001'
       });
     });
@@ -132,7 +131,6 @@ describe('Bitcore Node Service', function() {
       var config = service._getConfiguration();
       config.blockchainExplorerOpts['insight']['testnet/btc'].should.deep.equal({
         'apiPrefix': '/insight-api',
-        'provider': 'insight',
         'url': 'http://localhost:3001'
       });
     });
