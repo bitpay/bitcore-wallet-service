@@ -21,7 +21,6 @@
   },
   "dependencies": {
     "async": "^0.9.2",
-    "bitcore-lib": "^0.14.0",
     "body-parser": "^1.11.0",
     "compression": "^1.6.2",
     "coveralls": "^2.11.2",
@@ -61,6 +60,9 @@
     "sinon": "1.10.3",
     "supertest": "*",
     "tingodb": "^0.3.4"
+  },
+  "peerDependencies": {
+    "bitcore-lib": "~0.14.0"
   },
   "scripts": {
     "start": "./start.sh",
