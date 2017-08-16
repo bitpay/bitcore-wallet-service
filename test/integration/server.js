@@ -1410,6 +1410,84 @@ describe('Wallet service', function() {
     });
   });
 
+  describe('#getAddressFromWallet', function() {
+    describe('1-of-1 (BIP44 & P2PKH)', function() {
+      var server, wallet;
+      beforeEach(function(done) {
+        helpers.createAndJoinWallet(1, 1, function(s, w) {
+          server = s;
+          wallet = w;
+          w.copayers[0].id.should.equal(TestData.copayers[0].id44);
+          done();
+        });
+      });
+
+      it('should get an address from wallet', function(done) {
+        server.createAddress({}, function(err, address) {
+          should.not.exist(err);
+          should.exist(address);
+          address.walletId.should.equal(wallet.id);
+          address.network.should.equal('livenet');
+          address.address.should.equal('1L3z9LPd861FWQhf3vDn89Fnc9dkdBo2CG');
+          address.isChange.should.be.false;
+          address.path.should.equal('m/0/0');
+          address.type.should.equal('P2PKH');
+          server.getAddressFromWallet({
+            address: '1L3z9LPd861FWQhf3vDn89Fnc9dkdBo2CG',
+            walletId: wallet.id
+          }, function(err, address) {
+            should.not.exist(err);
+            address.address.should.equal('1L3z9LPd861FWQhf3vDn89Fnc9dkdBo2CG');
+            address.isChange.should.be.false;
+            address.path.should.equal('m/0/0');
+            address.type.should.equal('P2PKH');
+            done();
+          });
+        });
+      });
+      it('should not get an address from wallet - bad address', function(done) {
+        server.createAddress({}, function(err, address) {
+          should.not.exist(err);
+          should.exist(address);
+          address.walletId.should.equal(wallet.id);
+          address.network.should.equal('livenet');
+          address.address.should.equal('1L3z9LPd861FWQhf3vDn89Fnc9dkdBo2CG');
+          address.isChange.should.be.false;
+          address.path.should.equal('m/0/0');
+          address.type.should.equal('P2PKH');
+          server.getAddressFromWallet({
+            address: '1234',
+            walletId: wallet.id
+          }, function(err, address) {
+            should.not.exist(err);
+            should.equal(address, undefined);
+            done();
+          });
+        });
+      });
+      it('should not get an address from wallet - bad wallet', function(done) {
+        server.createAddress({}, function(err, address) {
+          should.not.exist(err);
+          should.exist(address);
+          address.walletId.should.equal(wallet.id);
+          address.network.should.equal('livenet');
+          address.address.should.equal('1L3z9LPd861FWQhf3vDn89Fnc9dkdBo2CG');
+          address.isChange.should.be.false;
+          address.path.should.equal('m/0/0');
+          address.type.should.equal('P2PKH');
+          server.getAddressFromWallet({
+            address: '1L3z9LPd861FWQhf3vDn89Fnc9dkdBo2CG',
+            walletId: '1234'
+          }, function(err, address) {
+            should.not.exist(err);
+            should.equal(address, undefined);
+            done();
+          });
+        });
+      });
+    });
+  });
+
   describe('Preferences', function() {
     var server, wallet;
     beforeEach(function(done) {
