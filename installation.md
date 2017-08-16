@@ -71,14 +71,19 @@ Note: this service will be used by blockchain monitor service as well as by BWS 
 An example of this configuration is:
 ```javascript
   blockchainExplorerOpts: {
-    livenet: {
-      provider: 'insight',
-      url: 'https://insight.bitpay.com:443',
-    },
-    testnet: {
-      provider: 'insight',
-      url: 'https://test-insight.bitpay.com:443',
-    },
+    defaultProvider: 'insight',
+
+    // Providers
+    'insight': {
+      'livenet/btc': {
+        url: 'https://insight.bitpay.com:443',
+        apiPrefix: '/insight-api'
+      },
+      'testnet/btc': {
+        url: 'https://test-insight.bitpay.com:443',
+        apiPrefix: '/insight-api'
+      }
+    }
   }
 ```
 

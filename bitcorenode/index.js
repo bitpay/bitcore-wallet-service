@@ -17,6 +17,7 @@ var child_process = require('child_process');
 var spawn = child_process.spawn;
 var EventEmitter = require('events').EventEmitter;
 var baseConfig = require('../config');
+var Constants = require('../lib/common/constants');
 
 /**
  * A Bitcore Node Service module
@@ -79,7 +80,6 @@ Service.prototype._getConfiguration = function() {
   var self = this;
 
   var providerOptions = {
-    provider: 'insight',
     url: (self.node.https ? 'https://' : 'http://') + 'localhost:' + self.node.port,
     apiPrefix: '/insight-api'
   };
@@ -88,13 +88,9 @@ Service.prototype._getConfiguration = function() {
   // the configuration options to communicate via the local running
   // instance of the insight-api service.
   if (self.node.network === Networks.livenet) {
-    baseConfig.blockchainExplorerOpts = {
-      livenet: providerOptions
-    };
+    baseConfig.blockchainExplorerOpts[Constants.LIVENET] = providerOptions;
   } else if (self.node.network === Networks.testnet) {
-    baseConfig.blockchainExplorerOpts = {
-      testnet: providerOptions
-    };
+    baseConfig.blockchainExplorerOpts[Constants.TESTNET] = providerOptions;
   } else {
     throw new Error('Unknown network');
   }

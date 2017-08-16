@@ -12,6 +12,7 @@ log.level = 'info';
 
 var WalletService = require('../../lib/server');
 var EmailService = require('../../lib/emailservice');
+var Constants = require('../../lib/common/constants');
 
 var TestData = require('../testdata');
 var helpers = require('./helpers');
@@ -48,6 +49,11 @@ describe('Email notifications', function() {
             mailerStub.sendMail.yields();
 
             emailService = new EmailService();
+
+            var publicTxUrlTemplate = {};
+            publicTxUrlTemplate[Constants.LIVENET] = 'https://insight.bitpay.com/tx/{{txid}}';
+            publicTxUrlTemplate[Constants.TESTNET] = 'https://test-insight.bitpay.com/tx/{{txid}}';
+
             emailService.start({
               lockOpts: {},
               messageBroker: server.messageBroker,
@@ -56,10 +62,7 @@ describe('Email notifications', function() {
               emailOpts: {
                 from: 'bws@dummy.net',
                 subjectPrefix: '[test wallet]',
-                publicTxUrlTemplate: {
-                  livenet: 'https://insight.bitpay.com/tx/{{txid}}',
-                  testnet: 'https://test-insight.bitpay.com/tx/{{txid}}',
-                },
+                publicTxUrlTemplate: publicTxUrlTemplate
               },
             }, function(err) {
               should.not.exist(err);
@@ -463,6 +466,11 @@ describe('Email notifications', function() {
             mailerStub.sendMail.yields();
 
             emailService = new EmailService();
+
+            var publicTxUrlTemplate = {};
+            publicTxUrlTemplate[Constants.LIVENET] = 'https://insight.bitpay.com/tx/{{txid}}';
+            publicTxUrlTemplate[Constants.TESTNET] = 'https://test-insight.bitpay.com/tx/{{txid}}';
+
             emailService.start({
               lockOpts: {},
               messageBroker: server.messageBroker,
@@ -471,10 +479,7 @@ describe('Email notifications', function() {
               emailOpts: {
                 from: 'bws@dummy.net',
                 subjectPrefix: '[test wallet]',
-                publicTxUrlTemplate: {
-                  livenet: 'https://insight.bitpay.com/tx/{{txid}}',
-                  testnet: 'https://test-insight.bitpay.com/tx/{{txid}}',
-                },
+                publicTxUrlTemplate: publicTxUrlTemplate
               },
             }, function(err) {
               should.not.exist(err);

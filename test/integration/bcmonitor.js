@@ -12,6 +12,7 @@ log.level = 'info';
 
 var WalletService = require('../../lib/server');
 var BlockchainMonitor = require('../../lib/blockchainmonitor');
+var Constants = require('../../lib/common/constants');
 
 var TestData = require('../testdata');
 var helpers = require('./helpers');
@@ -44,14 +45,16 @@ describe('Blockchain monitor', function() {
         wallet = w;
 
         var bcmonitor = new BlockchainMonitor();
+
+        var blockchainExplorers = {};
+        blockchainExplorers[Constants.TESTNET] = blockchainExplorer;
+        blockchainExplorers[Constants.LIVENET] = blockchainExplorer;
+
         bcmonitor.start({
           lockOpts: {},
           messageBroker: server.messageBroker,
           storage: storage,
-          blockchainExplorers: {
-            'testnet': blockchainExplorer,
-            'livenet': blockchainExplorer
-          },
+          blockchainExplorers: blockchainExplorers,
         }, function(err) {
           should.not.exist(err);
           done();

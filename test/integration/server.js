@@ -1138,7 +1138,7 @@ describe('Wallet service', function() {
           should.not.exist(err);
           should.exist(address);
           address.walletId.should.equal(wallet.id);
-          address.network.should.equal('livenet');
+          address.network.should.equal(Constants.LIVENET);
           address.address.should.equal('3BVJZ4CYzeTtawDtgwHvWV5jbvnXtYe97i');
           address.isChange.should.be.false;
           address.path.should.equal('m/2147483647/0/0');
@@ -1202,7 +1202,7 @@ describe('Wallet service', function() {
           should.not.exist(err);
           should.exist(address);
           address.walletId.should.equal(wallet.id);
-          address.network.should.equal('livenet');
+          address.network.should.equal(Constants.LIVENET);
           address.address.should.equal('36q2G5FMGvJbPgAVEaiyAsFGmpkhPKwk2r');
           address.isChange.should.be.false;
           address.path.should.equal('m/0/0');
@@ -1269,7 +1269,7 @@ describe('Wallet service', function() {
           should.not.exist(err);
           should.exist(address);
           address.walletId.should.equal(wallet.id);
-          address.network.should.equal('livenet');
+          address.network.should.equal(Constants.LIVENET);
           address.address.should.equal('1L3z9LPd861FWQhf3vDn89Fnc9dkdBo2CG');
           address.isChange.should.be.false;
           address.path.should.equal('m/0/0');
@@ -5095,7 +5095,7 @@ describe('Wallet service', function() {
     it('should broadcast a raw tx', function(done) {
       helpers.stubBroadcast();
       server.broadcastRawTx({
-        network: 'testnet',
+        network: Constants.TESTNET,
         rawTx: 'raw tx',
       }, function(err, txid) {
         should.not.exist(err);
@@ -5652,14 +5652,14 @@ describe('Wallet service', function() {
     });
     it('should pull new block notifications along with wallet notifications in the last 60 seconds', function(done) {
       // Simulate new block notification
-      server.walletId = 'livenet';
+      server.walletId = Constants.LIVENET;
       server._notify('NewBlock', {
         hash: 'dummy hash',
       }, {
         isGlobal: true
       }, function(err) {
         should.not.exist(err);
-        server.walletId = 'testnet';
+        server.walletId = Constants.TESTNET;
         server._notify('NewBlock', {
           hash: 'dummy hash',
         }, {
@@ -6603,7 +6603,7 @@ describe('Wallet service', function() {
 
           blockchainExplorer.getBlockchainHeight = sinon.stub().callsArgWith(0, null, 2000);
           server._notify('NewBlock', {
-            network: 'livenet',
+            network: Constants.LIVENET,
             hash: 'dummy hash',
           }, {
             isGlobal: true

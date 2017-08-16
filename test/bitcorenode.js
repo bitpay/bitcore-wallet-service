@@ -5,6 +5,7 @@ var proxyquire = require('proxyquire');
 var bitcore = require('bitcore-lib');
 var sinon = require('sinon');
 var Service = require('../bitcorenode');
+var Constants = require('../lib/common/constants');
 
 describe('Bitcore Node Service', function() {
   describe('#constructor', function() {
@@ -115,9 +116,8 @@ describe('Bitcore Node Service', function() {
       };
       var service = new Service(options);
       var config = service._getConfiguration();
-      config.blockchainExplorerOpts.livenet.should.deep.equal({
+      config.blockchainExplorerOpts['insight'][Constants.LIVENET].should.deep.equal({
         'apiPrefix': '/insight-api',
-        'provider': 'insight',
         'url': 'http://localhost:3001'
       });
     });
@@ -130,9 +130,8 @@ describe('Bitcore Node Service', function() {
       };
       var service = new Service(options);
       var config = service._getConfiguration();
-      config.blockchainExplorerOpts.testnet.should.deep.equal({
+      config.blockchainExplorerOpts['insight'][Constants.TESTNET].should.deep.equal({
         'apiPrefix': '/insight-api',
-        'provider': 'insight',
         'url': 'http://localhost:3001'
       });
     });
