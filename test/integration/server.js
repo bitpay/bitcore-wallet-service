@@ -2642,6 +2642,30 @@ describe('Wallet service', function() {
             });
           });
         });
+        it('should not check outputs amount is bigger then inputs if having unknown input value', function(done) {
+          helpers.stubUtxos(server, wallet, [1], function(utxos) {
+            server.getUtxos({}, function(err, utxos) {
+              should.not.exist(err);
+              utxos[0].satoshis = 0; // setting "unknown" input amount
+              var inputs = [utxos[0]];
+              var txOpts = {
+                outputs: [{
+                  toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
+                  amount: 2.5e8,
+                }],
+                feePerKb: 100e2,
+                inputs: inputs,
+              };
+              server.createTx(txOpts, function(err, tx) {
+                should.not.exist(err);
+                should.exist(tx);
+                var txids = _.pluck(tx.inputs, 'txid');
+                txids.should.contain(utxos[0].txid);
+                done();
+              });
+            });
+          });
+        });
       });
 
       describe('Foreign ID', function() {
