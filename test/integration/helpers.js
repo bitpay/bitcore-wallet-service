@@ -335,6 +335,7 @@ helpers.stubUtxos = function(server, wallet, amounts, opts, cb) {
       return next();
     },
   ], function(err) {
+    if (err) console.log('[helpers.js.337:err:]',err); 
     should.not.exist(err);
     return cb(helpers._utxos);
   });
@@ -386,6 +387,11 @@ helpers.stubAddressActivity = function(activeAddresses) {
   };
 };
 
+helpers.stubAddressActivityTrue = function() {
+  blockchainExplorer.getAddressActivity = function(address, cb) {
+    return cb(null, true);
+  };
+};
 helpers.clientSign = function(txp, derivedXPrivKey) {
   var self = this;
 

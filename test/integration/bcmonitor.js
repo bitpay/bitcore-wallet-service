@@ -89,20 +89,21 @@ describe('Blockchain monitor', function() {
     });
   });
 
-  it('should update addressWithBalance cache on 1 incoming tx', function(done) {
+  it('should update addressWithUtxo cache on 1 incoming tx', function(done) {
     server.createAddress({}, function(err, address) {
       should.not.exist(err);
       var incoming = {
         txid: '123',
         vout: [{}],
       };
-      server.storage.fetchAddressesWithBalance(wallet.id, function(err,ret) {
+      server.storage.fetchAddressesWithUtxo(wallet.id, function(err,ret) {
         should.not.exist(err);
         _.isEmpty(ret).should.equal(true);
         incoming.vout[0][address.address] = 1500;
+
         socket.handlers['tx'](incoming);
         setTimeout(function() {
-          server.storage.fetchAddressesWithBalance(wallet.id, function(err,ret) {
+          server.storage.fetchAddressesWithUtxo(wallet.id, function(err,ret) {
             should.not.exist(err);
             ret.length.should.equal(1);
             ret[0].address.should.equal(address.address);
@@ -113,11 +114,11 @@ describe('Blockchain monitor', function() {
     });
   });
 
-  it('should update addressWithBalance cache on 2 incoming tx, same address', function(done) {
+  it('should update addressWithUtxo cache on 2 incoming tx, same address', function(done) {
     server.createAddress({}, function(err, address) {
       should.not.exist(err);
 
-      server.storage.fetchAddressesWithBalance(wallet.id, function(err,ret) {
+      server.storage.fetchAddressesWithUtxo(wallet.id, function(err,ret) {
         should.not.exist(err);
         _.isEmpty(ret).should.equal(true);
 
@@ -139,7 +140,7 @@ describe('Blockchain monitor', function() {
           socket.handlers['tx'](incoming2);
 
           setTimeout(function() {
-            server.storage.fetchAddressesWithBalance(wallet.id, function(err,ret) {
+            server.storage.fetchAddressesWithUtxo(wallet.id, function(err,ret) {
               should.not.exist(err);
               ret.length.should.equal(1);
               ret[0].address.should.equal(address.address);
@@ -152,12 +153,12 @@ describe('Blockchain monitor', function() {
   });
 
 
-  it('should update addressWithBalance cache on 2 incoming tx, different address', function(done) {
+  it('should update addressWithUtxo cache on 2 incoming tx, different address', function(done) {
     server.createAddress({}, function(err, address) {
       should.not.exist(err);
       server.createAddress({}, function(err, address2) {
         should.not.exist(err);
-        server.storage.fetchAddressesWithBalance(wallet.id, function(err,ret) {
+        server.storage.fetchAddressesWithUtxo(wallet.id, function(err,ret) {
           should.not.exist(err);
           _.isEmpty(ret).should.equal(true);
 
@@ -178,10 +179,11 @@ describe('Blockchain monitor', function() {
             socket.handlers['tx'](incoming2);
 
             setTimeout(function() {
-              server.storage.fetchAddressesWithBalance(wallet.id, function(err,ret) {
+              server.storage.fetchAddressesWithUtxo(wallet.id, function(err,ret) {
                 should.not.exist(err);
                 ret.length.should.equal(2);
                 ret[0].address.should.equal(address.address);
+                ret[1].address.should.equal(address2.address);
                 done();
               });
             }, 100);
