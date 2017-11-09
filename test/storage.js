@@ -232,28 +232,35 @@ describe('Storage', function() {
     });
 
 
-
-    it('should get addr from history cache', function(done) {
-      var items = Data.history;
-      storage.storeTxHistoryCache('1', 10, 0, items , function() {
-        storage._getAddressesFromHistoryCache('1', 3, function(err,addr) {
-          should.not.exist(err);
-          addr.sort().join(',').should.be.equal('addr0,addr1,addr2,addr3');
+    describe('#history cache', function() {
+      beforeEach(function(done) {
+        storage.clearTxHistoryCache('1', function() {
           done();
         });
       });
-    });
 
-    it('should get addr from history cache', function(done) {
-      var items = Data.history;
-      storage.storeTxHistoryCache('1', 10, 0, items , function() {
-        storage._getAddressesFromHistoryCache('1', 1, function(err,addr) {
-          should.not.exist(err);
-          addr.sort().join(',').should.be.equal('addr0,addr1,addr2');
-          done();
+      it('should get addr from history cache', function(done) {
+        var items = Data.history;
+        storage.storeTxHistoryCache('1', 10, 0, items , function() {
+          storage._getAddressesFromHistoryCache('1', 3, function(err,addr) {
+            should.not.exist(err);
+            addr.sort().join(',').should.be.equal('addr0,addr1,addr2,addr3');
+            done();
+          });
         });
       });
-    });
 
+      it('should get addr from history cache (case 2)', function(done) {
+        var items = Data.history;
+        storage.storeTxHistoryCache('1', 10, 0, items , function() {
+          storage._getAddressesFromHistoryCache('1', 1, function(err,addr) {
+            should.not.exist(err);
+            addr.sort().join(',').should.be.equal('addr0,addr1,addr2');
+            done();
+          });
+        });
+      });
+
+    });
   });
 });

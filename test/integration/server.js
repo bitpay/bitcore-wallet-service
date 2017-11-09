@@ -28,6 +28,7 @@ var Model = require('../../lib/model');
 var WalletService = require('../../lib/server');
 
 var TestData = require('../testdata');
+var Data = require('../storage-data');
 var helpers = require('./helpers');
 var storage, blockchainExplorer, request;
 
@@ -1975,7 +1976,7 @@ describe('Wallet service', function() {
 
   describe('#getBalance alive&dead addresses ', function() {
     var server, wallet, clock;
-    var _threshold = Defaults.TWO_STEP_BALANCE_THRESHOLD;
+    var _threshold = Defaults.DA_MIN_ADDR;
     beforeEach(function(done) {
       clock = sinon.useFakeTimers(Date.now(), 'Date');
       Defaults.DA_MIN_ADDR = 0;
@@ -1988,7 +1989,7 @@ describe('Wallet service', function() {
     });
     afterEach(function() {
       clock.restore();
-      Defaults.TWO_STEP_BALANCE_THRESHOLD = _threshold;
+      Defaults.DA_MIN_ADDR = _threshold;
     });
 
     it('should monitor addresses with balance', function(done) {
@@ -2001,9 +2002,7 @@ describe('Wallet service', function() {
 
             // generate GAP+5 addresses
             helpers.createAddresses(server, wallet, 25, 0, function(mainAddresses, changeAddress) {
-
               server.getBalance({}, function(err, balance, fromCache, nr) {
-    
                 should.exist(balance);
                 balance.totalAmount.should.equal(helpers.toSatoshi(6));
 
@@ -2167,6 +2166,47 @@ describe('Wallet service', function() {
         });
       });
     });
+
+
+    it('should monitor addresses from with recent tx', function(done) {
+      var items = _.cloneDeep(Data.history);
+
+      helpers.stubUtxos(server, wallet, [1, 'u2', 3], function() {
+        server.getBalance({}, function(err, balance, fromCache, nr) {
+          // nr are the addresses that stayed in "with recent balance"
+          //
+          should.not.exist(err);
+          server.getWallet({}, function(err, wallet) {
+
+
+            // generate GAP+5 addresses
+            helpers.createAddresses(server, wallet, 25, 0, function(mainAddresses, changeAddress) {
+
+              // Add first 2 addr to history
+              items[0].inputs[0].address=mainAddresses[0].address;
+              items[1].outputs[0].address=mainAddresses[1].address;
+
+              storage.storeTxHistoryCache(wallet.id, 10, 0, items , function() {
+
+
+                server.getBalance({}, function(err, balance, fromCache, nr) {
+                  should.exist(balance);
+                  balance.totalAmount.should.equal(helpers.toSatoshi(6));
+
+                  should.not.exist(fromCache);
+
+                  // There should be 2 active addresses with balance + last 20 main + 2 recent
+                  nr.should.equal(2 + 20 + 2); 
+                  done();
+                });
+              });
+            });
+          });
+        });
+      });
+    });
+
+ 
 
 
   });
