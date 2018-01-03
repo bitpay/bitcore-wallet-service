@@ -16,7 +16,7 @@ var ExpressApp = require('../lib/expressapp');
 var child_process = require('child_process');
 var spawn = child_process.spawn;
 var EventEmitter = require('events').EventEmitter;
-var baseConfig = require('../config');
+var config = require('../config');
 
 /**
  * A Bitcore Node Service module
@@ -33,10 +33,10 @@ var Service = function(options) {
   this.node = options.node;
   this.https = options.https || this.node.https;
   this.httpsOptions = options.httpsOptions || this.node.httpsOptions;
-  this.bwsPort = options.bwsPort || baseConfig.port;
+  this.bwsPort = options.bwsPort || config.port;
   this.messageBrokerPort = options.messageBrokerPort || 3380;
-  if (baseConfig.lockOpts) {
-    this.lockerPort = baseConfig.lockOpts.lockerServer.port;
+  if (config.lockOpts) {
+    this.lockerPort = config.lockOpts.lockerServer.port;
   }
   this.lockerPort = options.lockerPort || this.lockerPort;
 };
@@ -70,38 +70,6 @@ Service.prototype._readHttpsOptions = function() {
   return serverOpts;
 };
 
-/**
- * Will get the configuration with settings for the locally
- * running Insight API.
- * @returns {Object}
- */
-Service.prototype._getConfiguration = function() {
-  var self = this;
-
-  var providerOptions = {
-    provider: 'insight',
-    url: (self.node.https ? 'https://' : 'http://') + 'localhost:' + self.node.port,
-    apiPrefix: '/insight-api'
-  };
-
-  // A bitcore-node is either livenet or testnet, so we'll pass
-  // the configuration options to communicate via the local running
-  // instance of the insight-api service.
-  if (self.node.network === Networks.livenet) {
-    baseConfig.blockchainExplorerOpts = {
-      livenet: providerOptions
-    };
-  } else if (self.node.network === Networks.testnet) {
-    baseConfig.blockchainExplorerOpts = {
-      testnet: providerOptions
-    };
-  } else {
-    throw new Error('Unknown network');
-  }
-
-  return baseConfig;
-
-};
 
 /**
  * Will start the HTTP web server and socket.io for the wallet service.
@@ -131,12 +99,6 @@ Service.prototype._startWalletService = function(config, next) {
 Service.prototype.start = function(done) {
 
   var self = this;
-  var config;
-  try {
-    config = self._getConfiguration();
-  } catch (err) {
-    return done(err);
-  }
 
   // Locker Server
   var locker = new Locker();

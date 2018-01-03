@@ -94,49 +94,6 @@ describe('Bitcore Node Service', function() {
       serverOptions.ca[2].should.equal('CAroot');
     });
   });
-  describe('#_getConfiguration', function() {
-    it('will throw with an unknown network', function() {
-      var options = {
-        node: {
-          network: 'unknown'
-        }
-      };
-      var service = new Service(options);
-      (function() {
-        service._getConfiguration();
-      }).should.throw('Unknown network');
-    });
-    it('livenet local insight', function() {
-      var options = {
-        node: {
-          network: bitcore.Networks.livenet,
-          port: 3001
-        }
-      };
-      var service = new Service(options);
-      var config = service._getConfiguration();
-      config.blockchainExplorerOpts.livenet.should.deep.equal({
-        'apiPrefix': '/insight-api',
-        'provider': 'insight',
-        'url': 'http://localhost:3001'
-      });
-    });
-    it('testnet local insight', function() {
-      var options = {
-        node: {
-          network: bitcore.Networks.testnet,
-          port: 3001
-        }
-      };
-      var service = new Service(options);
-      var config = service._getConfiguration();
-      config.blockchainExplorerOpts.testnet.should.deep.equal({
-        'apiPrefix': '/insight-api',
-        'provider': 'insight',
-        'url': 'http://localhost:3001'
-      });
-    });
-  });
   describe('#_startWalletService', function() {
     it('error from express', function(done) {
       function TestExpressApp() {}
