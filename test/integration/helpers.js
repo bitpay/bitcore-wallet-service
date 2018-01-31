@@ -65,7 +65,8 @@ helpers.beforeEach = function(cb) {
     var opts = {
       storage: storage,
       blockchainExplorer: blockchainExplorer,
-      request: sinon.stub()
+      request: sinon.stub(),
+      loglevel: 'error',
     };
     WalletService.initialize(opts, function() {
       return cb(opts);
