@@ -5834,6 +5834,23 @@ describe('Wallet service', function() {
         });
       });
     });
+
+    it('should allow rebroadcast a tx when using .force', function(done) {
+      helpers.stubBroadcast();
+      server.broadcastTx({
+        txProposalId: txpid
+      }, function(err) {
+        should.not.exist(err);
+        server.broadcastTx({
+          txProposalId: txpid,
+          force: true,
+        }, function(err) {
+          should.not.exist(err);
+          done();
+        });
+      });
+    });
+ 
     it('should auto process already broadcasted txs', function(done) {
       helpers.stubBroadcast();
       server.getPendingTxs({}, function(err, txs) {
@@ -5875,7 +5892,7 @@ describe('Wallet service', function() {
         });
       });
     });
-    it('should fail to brodcast a not yet accepted tx', function(done) {
+    it('should fail to broadcast a not yet accepted tx', function(done) {
       helpers.stubBroadcast();
       var txOpts = {
         outputs: [{
@@ -5895,6 +5912,28 @@ describe('Wallet service', function() {
         });
       });
     });
+    it('should fail to broadcast a not yet accepted tx, even with force', function(done) {
+      helpers.stubBroadcast();
+      var txOpts = {
+        outputs: [{
+          toAddress: '18PzpUFkFZE8zKWUPvfykkTxmB9oMR8qP7',
+          amount: 9e8,
+        }],
+        feePerKb: 100e2,
+      };
+      helpers.createAndPublishTx(server, txOpts, TestData.copayers[0].privKey_1H_0, function(txp) {
+        should.exist(txp);
+        server.broadcastTx({
+          txProposalId: txp.id,
+          force: true,
+        }, function(err) {
+          should.exist(err);
+          err.code.should.equal('TX_NOT_ACCEPTED');
+          done();
+        });
+      });
+    });
+
     it('should keep tx as accepted if unable to broadcast it', function(done) {
       blockchainExplorer.broadcast = sinon.stub().callsArgWith(1, 'broadcast error');
       blockchainExplorer.getTransaction = sinon.stub().callsArgWith(1, null, null);
