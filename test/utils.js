@@ -148,7 +148,7 @@ describe('Utils', function() {
   describe('#translateAddress', function() {
     it('should translate address from btc to bch', function() {
       var res = Utils.translateAddress('1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA', 'bch');
-      res.should.equal('CcJ4qUfyQ8x5NwhAeCQkrBSWVeXxXghcNz');
+      res.should.equal('bitcoincash:qrvcdmgpk73zyfd8pmdl9wnuld36zh9n4gms8s0u59');
     });
     it('should translate address from bch to btc', function() {
       var res = Utils.translateAddress('HBf8isgS8EXG1r3X6GP89FmooUmiJ42wHS', 'btc');
@@ -157,7 +157,7 @@ describe('Utils', function() {
  
     it('should keep the address if there is nothing to do (bch)', function() {
       var res = Utils.translateAddress('CcJ4qUfyQ8x5NwhAeCQkrBSWVeXxXghcNz', 'bch');
-      res.should.equal('CcJ4qUfyQ8x5NwhAeCQkrBSWVeXxXghcNz');
+      res.should.equal('bitcoincash:qrvcdmgpk73zyfd8pmdl9wnuld36zh9n4gms8s0u59');
     });
     it('should keep the address if there is nothing to do (btc)', function() {
       var res = Utils.translateAddress('1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA', 'btc');
