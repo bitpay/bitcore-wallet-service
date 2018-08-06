@@ -24,6 +24,8 @@ More about BWS at https://blog.bitpay.com/announcing-the-bitcore-wallet-suite/
  git clone https://github.com/bitpay/bitcore-wallet-service.git
  cd bitcore-wallet-service
  npm install
+ cp config.js.sample config.js
+ # edit config.js to match your system
  npm start
 ```
 
