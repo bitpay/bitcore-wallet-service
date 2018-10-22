@@ -100,9 +100,11 @@ var config = {
   // },
   // To use sendgrid:
   // var sgTransport = require('nodemail-sendgrid-transport');
-  // mailer:sgTransport({
-  //  api_user: xxx,
-  //  api_key: xxx,
+  // mailer: sgTransport({
+  //   auth: {
+  //     api_user: xxx (Not required if using api key from sendgrid),
+  //     api_key: xxx,
+  //   }
   // });
 };
 module.exports = config;
