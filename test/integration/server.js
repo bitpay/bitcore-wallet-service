@@ -10,6 +10,8 @@ var log = require('npmlog');
 log.debug = log.verbose;
 log.level = 'info';
 
+var config = require('../test-config');
+
 var Bitcore = require('bitcore-lib');
 var Bitcore_ = {
   btc: Bitcore,
