@@ -14,7 +14,7 @@ addons:
 node_js:
   - '8'
 before_script:
-  - sleep 15  # suggested in https://docs.travis-ci.com/user/database-setup/#mongodb
+  - sleep 30  # suggested in https://docs.travis-ci.com/user/database-setup/#mongodb
   # - mongo mydb_test --eval 'db.createUser({user:"travis",pwd:"test",roles:["readWrite"]});'
   
 before_install:
