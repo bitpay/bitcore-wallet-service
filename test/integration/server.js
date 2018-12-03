@@ -359,7 +359,7 @@ describe('Wallet service', function() {
       });
     });
 
-    it('should check m-n combination', function(done) {
+    it.only('should check m-n combination', function(done) {
       var pairs = [{
         m: 0,
         n: 0,
@@ -422,6 +422,7 @@ describe('Wallet service', function() {
             should.exist(err);
             err.message.should.equal('Invalid combination of required copayers / total copayers');
           } else {
+console.log('[server.js.425:err:]',err); //TODO
             should.not.exist(err);
           }
           return cb();
