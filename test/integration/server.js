@@ -38,7 +38,9 @@ var storage, blockchainExplorer, request;
 describe('Wallet service', function() {
 
   before(function(done) {
-    this.timeout(15000); // for travis
+    if (process.env.TRAVIS) {
+      this.timeout(5000); // for travis
+    }
     helpers.before(done);
   });
   beforeEach(function(done) {
@@ -3204,6 +3206,10 @@ console.log('[server.js.425:err:]',err); //TODO
     describe('#createTx ' + coin, function() {
       var addressStr, idKey;
       before(function() {
+        if (process.env.TRAVIS) {
+          this.timeout(5000); // for travis
+        }
+
         addressStr = addrMap[coin];
         idKey = idKeyMap[coin];
       });
@@ -4211,6 +4217,10 @@ console.log('[server.js.425:err:]',err); //TODO
       });
 
       it('should follow backoff time after consecutive rejections', function(done) {
+        if (process.env.TRAVIS) {
+          this.timeout(5000); // for travis
+        }
+
         clock = sinon.useFakeTimers(Date.now(), 'Date');
         var txOpts = {
           outputs: [{
