@@ -36,7 +36,11 @@ var storage, blockchainExplorer, request;
 
 
 describe('Wallet service', function() {
+
   before(function(done) {
+    if (process.env.TRAVIS) {
+      this.timeout(15000); // for travis
+    }
     helpers.before(done);
   });
   beforeEach(function(done) {
