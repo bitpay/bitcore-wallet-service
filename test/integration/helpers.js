@@ -195,6 +195,7 @@ helpers.createAndJoinWallet = function(m, n, opts, cb) {
     singleAddress: !!opts.singleAddress,
     coin: opts.coin || 'btc',
     network: opts.network || 'livenet',
+    nativeCashAddr: opts.nativeCashAddr,
   };
   if (_.isBoolean(opts.supportBIP44AndP2PKH))
     walletOpts.supportBIP44AndP2PKH = opts.supportBIP44AndP2PKH;
@@ -231,6 +232,7 @@ helpers.createAndJoinWallet = function(m, n, opts, cb) {
     }, function(err) {
       if (err) return new Error('Could not generate wallet');
       helpers.getAuthServer(copayerIds[0], function(s) {
+        if (opts.earlyRet) return cb(s);
         s.getWallet({}, function(err, w) {
           cb(s, w);
         });
@@ -528,10 +530,12 @@ helpers.createAddresses = function(server, wallet, main, change, cb) {
 
 helpers.createAndPublishTx = function(server, txOpts, signingKey, cb) {
   server.createTx(txOpts, function(err, txp) {
+    if (err) console.log(err);
     should.not.exist(err, "Error creating a TX");
     should.exist(txp,"Error... no txp");
     var publishOpts = helpers.getProposalSignatureOpts(txp, signingKey);
     server.publishTx(publishOpts, function(err) {
+      if (err) console.log(err);
       should.not.exist(err);
       return cb(txp);
     });
